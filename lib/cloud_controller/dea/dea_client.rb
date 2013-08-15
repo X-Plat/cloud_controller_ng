@@ -256,11 +256,16 @@ module VCAP::CloudController
         app.routes_changed = false
       end
 
+      def app_bns_node(app)
+        "#{app.space.organization.name}-#{app.space.name}-#{app.name}"
+      end
+
       def start_app_message(app)
         # TODO: add debug support
         {
+          :application_db_id => app.id,
           :droplet => app.guid,
-          :tags => {:space => app.space_guid},
+          :tags => {:space => app.space_guid, :bns_node =>app_bns_node(app) },
           :name => app.name,
           :uris => app.uris,
           :prod => app.production,
