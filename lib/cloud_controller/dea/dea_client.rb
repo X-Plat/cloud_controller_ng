@@ -279,7 +279,8 @@ module VCAP::CloudController
           :limits => {
             :mem => app.memory,
             :disk => app.disk_quota,
-            :fds => app.file_descriptors
+            :fds => app.file_descriptors,
+            :cpu => app.cpu_quota
           },
           :cc_partition => config[:cc_partition],
           :env => (app.environment_json || {}).map {|k,v| "#{k}=#{v}"},

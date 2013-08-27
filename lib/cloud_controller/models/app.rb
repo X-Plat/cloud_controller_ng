@@ -53,7 +53,7 @@ module VCAP::CloudController
 
       import_attributes :name, :production,
         :space_guid, :stack_guid, :buildpack, :detected_buildpack,
-        :environment_json, :memory, :instances, :disk_quota,
+        :environment_json, :memory, :instances, :disk_quota, :cpu_quota,
         :state, :command, :console, :debug,
         :staging_task_id, :service_binding_guids, :route_guids
 

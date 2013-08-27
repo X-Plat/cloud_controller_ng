@@ -17,6 +17,7 @@ module VCAP::CloudController
 
       attribute  :environment_json,    Hash,       :default => {}
       attribute  :memory,              Integer,    :default => 256
+      attribute  :cpu_quota,           String,     :default => "0.2"
       attribute  :instances,           Integer,    :default => 1
       attribute  :disk_quota,          Integer,    :default => 1024
 

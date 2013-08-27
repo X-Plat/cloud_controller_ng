@@ -202,6 +202,7 @@ module VCAP::CloudController
         :resources   => {
           :memory => app.memory,
           :disk   => app.disk_quota,
+          :cpu   => app.cpu_quota,
           :fds    => app.file_descriptors
         },
 
