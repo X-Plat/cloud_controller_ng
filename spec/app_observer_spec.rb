@@ -6,9 +6,10 @@ module VCAP::CloudController
     let(:stager_pool) { double(:stager_pool) }
     let(:dea_pool) { double(:dea_pool) }
     let(:config_hash) { {:config => 'hash'} }
+    let(:blobstore_url_generator) { double }
 
     before do
-      DeaClient.configure(config_hash, message_bus, dea_pool)
+      DeaClient.configure(config_hash, message_bus, dea_pool, blobstore_url_generator)
       AppObserver.configure(config_hash, message_bus, stager_pool)
     end
 
@@ -35,7 +36,7 @@ module VCAP::CloudController
           blobstore_key = File.join(app.guid, app.droplet_hash)
 
           droplets = CloudController::DependencyLocator.instance.droplet_blobstore
-          droplets.cp_from_local(droplet.path, blobstore_key)
+          droplets.cp_to_blobstore(droplet.path, blobstore_key)
 
           expect { AppObserver.deleted(app) }.to change {
             droplets.exists?(blobstore_key)
@@ -47,7 +48,7 @@ module VCAP::CloudController
           blobstore_key = app.guid
 
           droplets = CloudController::DependencyLocator.instance.droplet_blobstore
-          droplets.cp_from_local(droplet.path, blobstore_key)
+          droplets.cp_to_blobstore(droplet.path, blobstore_key)
 
           expect { AppObserver.deleted(app) }.to change {
             droplets.exists?(blobstore_key)
@@ -59,7 +60,7 @@ module VCAP::CloudController
           blobstore_key = app.guid
 
           buildpack_caches = CloudController::DependencyLocator.instance.buildpack_cache_blobstore
-          buildpack_caches.cp_from_local(droplet.path, blobstore_key)
+          buildpack_caches.cp_to_blobstore(droplet.path, blobstore_key)
 
           expect { AppObserver.deleted(app) }.to change {
             buildpack_caches.exists?(blobstore_key)
@@ -75,7 +76,7 @@ module VCAP::CloudController
           blobstore_key = app.guid
 
           packages = CloudController::DependencyLocator.instance.package_blobstore
-          packages.cp_from_local(droplet.path, blobstore_key)
+          packages.cp_to_blobstore(droplet.path, blobstore_key)
 
           expect { AppObserver.deleted(app) }.to change {
             packages.exists?(blobstore_key)
@@ -126,7 +127,10 @@ module VCAP::CloudController
           with(config_hash,
                message_bus,
                app,
-               stager_pool).and_return(stager_task)
+               stager_pool,
+               instance_of(CloudController::BlobstoreUrlGenerator)
+
+        ).and_return(stager_task)
 
         stager_task.stub(:stage) do |&callback|
           callback.call(:started_instances => started_instances)

@@ -17,23 +17,16 @@ module VCAP::CloudController
   class StagingsController < RestController::Base
     include VCAP::Errors
 
-    # Endpoint does its own (non-standard) auth
-    allow_unauthenticated_access
-
-
     STAGING_PATH = "/staging"
 
-    APP_PATH = "#{STAGING_PATH}/apps"
     DROPLET_PATH = "#{STAGING_PATH}/droplets"
     BUILDPACK_CACHE_PATH = "#{STAGING_PATH}/buildpack_cache"
 
-    class DropletUploadHandle
-      attr_accessor :guid, :upload_path, :buildpack_cache_upload_path
+    # Endpoint does its own (non-standard) auth
+    allow_unauthenticated_access
 
-      def initialize(guid)
-        @guid = guid
-        @upload_path = nil
-      end
+    authenticate_basic_auth("#{STAGING_PATH}/*") do
+      [@config[:staging][:auth][:user], @config[:staging][:auth][:password]]
     end
 
     attr_reader :config
@@ -60,126 +53,18 @@ module VCAP::CloudController
         )
       end
 
-      def app_uri(app)
-        if AppPackage.blobstore.local?
-          staging_uri("#{APP_PATH}/#{app.guid}")
-        else
-          AppPackage.package_uri(app.guid)
-        end
-      end
-
-      def droplet_upload_uri(app)
-        upload_uri(app, :droplet)
-      end
-
-      def droplet_download_uri(app)
-        if blobstore.local?
-          staging_uri("#{DROPLET_PATH}/#{app.guid}/download")
-        else
-          droplet_uri(app)
-        end
-      end
-
-      def create_handle(guid)
-        handle = DropletUploadHandle.new(guid)
-        mutex.synchronize { upload_handles[handle.guid] = handle }
-        handle
-      end
-
-      def destroy_handle(handle)
-        return unless handle
-        mutex.synchronize do
-          files_to_delete = [handle.upload_path, handle.buildpack_cache_upload_path]
-          files_to_delete.each do |file|
-            File.delete(file) if file && File.exists?(file)
-          end
-          upload_handles.delete(handle.guid)
-        end
-      end
-
-      def lookup_handle(guid)
-        mutex.synchronize do
-          return upload_handles[guid]
-        end
-      end
-
       def store_droplet(app, path)
-        blobstore.cp_from_local(
-          path,
-          File.join(app.guid, app.droplet_hash),
-          blobstore.local?
-        )
+        CloudController::Droplet.new(app, blobstore).save(path)
       end
 
       def store_buildpack_cache(app, path)
-        buildpack_cache_blobstore.cp_from_local(
+        buildpack_cache_blobstore.cp_to_blobstore(
           path,
-          app.guid,
-          buildpack_cache_blobstore.local?
+          app.guid
         )
       end
 
-      def droplet_exists?(app)
-        !!app_droplet(app)
-      end
-
-      def buildpack_cache_upload_uri(app)
-        upload_uri(app, :buildpack_cache)
-      end
-
-      def buildpack_cache_download_uri(app)
-        if AppPackage.blobstore.local?
-          staging_uri("#{BUILDPACK_CACHE_PATH}/#{app.guid}/download")
-        else
-          buildpack_cache_blobstore.download_uri(app.guid)
-        end
-      end
-
-      def droplet_local_path(app)
-        file = app_droplet(app)
-        file.send(:path) if file
-      end
-
-      def buildpack_cache_local_path(app)
-        file = app_buildpack_cache(app)
-        file.send(:path) if file
-      end
-
-      # Return droplet uri for path for a given app's guid.
-      #
-      # The url is valid for 1 hour when using aws.
-      # TODO: The expiration should be configurable.
-      def droplet_uri(app)
-        f = app_droplet(app)
-        return nil unless f
-
-        return blobstore.download_uri_for_file(f)
-      end
-
-      def buildpack_cache_uri(app)
-        buildpack_cache_blobstore.download_uri(app.guid)
-      end
-
       private
-
-      def upload_uri(app, type)
-        prefix = type == :buildpack_cache ? BUILDPACK_CACHE_PATH : DROPLET_PATH
-        staging_uri("#{prefix}/#{app.guid}/upload")
-      end
-
-      def staging_uri(path)
-        URI::HTTP.build(
-          :host => @config[:bind_address],
-          :port => @config[:port],
-          :userinfo => [@config[:staging][:auth][:user], @config[:staging][:auth][:password]],
-          :path => path
-        ).to_s
-      end
-
-      def upload_handles
-        @upload_handles ||= {}
-      end
-
       MUTEX = Mutex.new
       def mutex
         MUTEX
@@ -187,17 +72,6 @@ module VCAP::CloudController
 
       def logger
         @logger ||= Steno.logger("cc.legacy_staging")
-      end
-
-      def app_droplet(app)
-        return unless app.staged?
-        key = File.join(app.guid, app.droplet_hash)
-        old_key = app.guid
-        blobstore.file(key) || blobstore.file(old_key)
-      end
-
-      def app_buildpack_cache(app)
-        @buildpack_cache_blobstore.file(app.guid)
       end
     end
 
@@ -228,23 +102,44 @@ module VCAP::CloudController
     def upload_droplet(guid)
       app = App.find(:guid => guid)
       raise AppNotFound.new(guid) if app.nil?
+      raise StagingError.new("malformed droplet upload request for #{app.guid}") unless upload_path
 
-      upload(app, :droplet)
+      # TODO: put in background job
+      app.droplet_hash = Digest::SHA1.file(upload_path).hexdigest
+
+      logger.debug "droplet.uploaded", :sha => app.droplet_hash
+
+      start = Time.now
+
+      self.class.store_droplet(app, upload_path)
+
+      logger.debug "droplet.saved", took: Time.now - start
+
+      app.save
+
+      logger.debug "app.saved"
+
+      HTTP::OK
     end
 
     def upload_buildpack_cache(guid)
       app = App.find(:guid => guid)
       raise AppNotFound.new(guid) if app.nil?
+      raise StagingError.new("malformed buildpack cache upload request for #{app.guid}") unless upload_path
 
-      upload(app, :buildpack_cache)
+      # TODO: put in background job
+      self.class.store_buildpack_cache(app, upload_path)
+
+      HTTP::OK
     end
 
     def download_droplet(guid)
       app = App.find(:guid => guid)
       raise AppNotFound.new(guid) if app.nil?
 
-      droplet_path = StagingsController.droplet_local_path(app)
-      droplet_url = StagingsController.droplet_uri(app)
+      droplet = CloudController::Droplet.new(app, StagingsController.blobstore)
+      droplet_path = droplet.local_path
+      droplet_url = droplet.download_url
 
       download(app, droplet_path, droplet_url)
     end
@@ -253,8 +148,9 @@ module VCAP::CloudController
       app = App.find(:guid => guid)
       raise AppNotFound.new(guid) if app.nil?
 
-      buildpack_cache_path = StagingsController.buildpack_cache_local_path(app)
-      buildpack_cache_url = StagingsController.buildpack_cache_uri(app)
+      file = StagingsController.buildpack_cache_blobstore.file(app.guid)
+      buildpack_cache_path = file.send(:path) if file
+      buildpack_cache_url =  StagingsController.buildpack_cache_blobstore.download_uri(app.guid)
       download(app, buildpack_cache_path, buildpack_cache_url)
     end
 
@@ -283,25 +179,6 @@ module VCAP::CloudController
     def upload(app, type)
       tag = (type == :buildpack_cache) ? "buildpack_cache" : "staged_droplet"
 
-      handle = self.class.lookup_handle(app.guid)
-      raise StagingError.new("staging not in progress for #{app.guid}") unless handle
-      raise StagingError.new("malformed droplet upload request for #{app.guid}") unless upload_path
-
-      final_path = save_path(app.guid, tag)
-      logger.debug "renaming #{tag} from '#{upload_path}' to '#{final_path}'"
-
-      begin
-        File.rename(upload_path, final_path)
-      rescue => e
-        raise StagingError.new("failed renaming #{tag} droplet from #{upload_path} to #{final_path}: #{e.inspect}\n#{e.backtrace.join("\n")}")
-      end
-
-      if type == :buildpack_cache
-        handle.buildpack_cache_upload_path = final_path
-      else
-        handle.upload_path = final_path
-      end
-
       logger.debug "uploaded #{tag} for #{app.guid} to #{final_path}"
 
       HTTP::OK
@@ -329,15 +206,6 @@ module VCAP::CloudController
 
     def tmpdir
       (config[:directories] && config[:directories][:tmpdir]) || Dir.tmpdir
-    end
-
-    controller.before "#{STAGING_PATH}/*" do
-      auth = Rack::Auth::Basic::Request.new(env)
-      unless auth.provided? && auth.basic? &&
-        auth.credentials == [@config[:staging][:auth][:user],
-                             @config[:staging][:auth][:password]]
-        raise NotAuthorized
-      end
     end
 
     get "/staging/apps/:guid", :download_app

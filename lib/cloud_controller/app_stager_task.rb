@@ -27,11 +27,12 @@ module VCAP::CloudController
     attr_reader :config
     attr_reader :message_bus
 
-    def initialize(config, message_bus, app, stager_pool)
+    def initialize(config, message_bus, app, stager_pool, blobstore_url_generator)
       @config = config
       @message_bus = message_bus
       @app = app
       @stager_pool = stager_pool
+      @blobstore_url_generator = blobstore_url_generator
     end
 
     def task_id
@@ -57,7 +58,6 @@ module VCAP::CloudController
 
       @message_bus.publish("staging.stop", :app_id => @app.guid)
 
-      @upload_handle = StagingsController.create_handle(@app.guid)
       @completion_callback = completion_callback
 
       staging_result = EM.schedule_sync do |promise|
@@ -84,12 +84,13 @@ module VCAP::CloudController
       { :app_id => @app.guid,
         :task_id => task_id,
         :properties => staging_task_properties(@app),
-        :download_uri => StagingsController.app_uri(@app),
-        :upload_uri => StagingsController.droplet_upload_uri(@app),
-        :buildpack_cache_download_uri => StagingsController.buildpack_cache_download_uri(@app),
-        :buildpack_cache_upload_uri => StagingsController.buildpack_cache_upload_uri(@app),
+        # All url generation should go to blobstore_url_generator
+        :download_uri => @blobstore_url_generator.app_package_download_url(@app),
+        :upload_uri => @blobstore_url_generator.droplet_upload_url(@app),
+        :buildpack_cache_download_uri => @blobstore_url_generator.buildpack_cache_download_url(@app),
+        :buildpack_cache_upload_uri => @blobstore_url_generator.buildpack_cache_upload_url(@app),
         :start_message => start_app_message,
-        :admin_buildpacks => Buildpack.list_admin_buildpacks
+        :admin_buildpacks => Buildpack.list_admin_buildpacks(@blobstore_url_generator)
       }
     end
 
@@ -110,10 +111,8 @@ module VCAP::CloudController
     rescue => e
       Loggregator.emit_error(@app.guid, "exception handling first response #{e.message}")
       logger.error("exception handling first response #{e.inspect}, backtrace: #{e.backtrace.join("\n")}")
-      destroy_upload_handle if staging_is_current?
       promise.fail(e)
     end
-
 
     def handle_second_response(response, error)
       @multi_message_bus_request.ignore_subsequent_responses
@@ -121,7 +120,6 @@ module VCAP::CloudController
       ensure_staging_is_current!
       process_response(response)
     rescue => e
-      destroy_upload_handle if staging_is_current?
       Loggregator.emit_error(@app.guid, "Encountered error: #{e.message}")
       logger.error "Encountered error: #{e}\n#{e.backtrace.join("\n")}"
     end
@@ -175,27 +173,12 @@ module VCAP::CloudController
     def staging_completion(stager_response)
       instance_was_started_by_dea = !!stager_response.droplet_hash
 
-      @app.droplet_hash = instance_was_started_by_dea ? stager_response.droplet_hash : Digest::SHA1.file(@upload_handle.upload_path).hexdigest
       @app.detected_buildpack = stager_response.detected_buildpack
-
-      StagingsController.store_droplet(@app, @upload_handle.upload_path)
-
-      if (buildpack_cache = @upload_handle.buildpack_cache_upload_path)
-        StagingsController.store_buildpack_cache(@app, buildpack_cache)
-      end
-
       @app.save
 
       DeaClient.dea_pool.mark_app_started(:dea_id => @stager_id, :app_id => @app.guid) if instance_was_started_by_dea
 
       @completion_callback.call(:started_instances => instance_was_started_by_dea ? 1 : 0) if @completion_callback
-    ensure
-      destroy_upload_handle
-    end
-
-
-    def destroy_upload_handle
-      StagingsController.destroy_handle(@upload_handle)
     end
 
     def staging_task_properties(app)
