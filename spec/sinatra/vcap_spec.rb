@@ -19,7 +19,9 @@ describe "Sinatra::VCAP" do
     end
 
     get "/structured_error" do
-      raise StructuredError.new('some message', {'foo' => 'bar'})
+      e = StructuredError.new('some message', {'foo' => 'bar'})
+      e.set_backtrace(['/foo:1', '/bar:2'])
+      raise e
     end
   end
 
@@ -127,6 +129,20 @@ describe "Sinatra::VCAP" do
     include_examples "vcap request id"
     include_examples "http header content type"
     it_behaves_like "a vcap rest error response", /ZeroDivisionError: divided by 0/
+
+    it 'returns an error type' do
+      decoded_response = Yajl::Parser.parse(last_response.body)
+      decoded_response.should have_key('error')
+      decoded_response['error'].should have_key('types')
+      decoded_response['error']['types'].should_not be_empty
+    end
+
+    it 'returns an error backtrace' do
+      decoded_response = Yajl::Parser.parse(last_response.body)
+      decoded_response.should have_key('error')
+      decoded_response['error'].should have_key('backtrace')
+      decoded_response['error']['backtrace'].should_not be_empty
+    end
   end
 
   describe "accessing a route that throws a StructuredError" do
@@ -144,9 +160,11 @@ describe "Sinatra::VCAP" do
       decoded_response = Yajl::Parser.parse(last_response.body)
       expect(decoded_response['code']).to eq(10001)
       expect(decoded_response['description']).to eq('some message')
-      expect(decoded_response['types']).to eq(%w(StructuredError StandardError))
-      expect(decoded_response['backtrace']).to be
-      expect(decoded_response['error']).to eq({ 'foo' => 'bar' })
+      expect(decoded_response['error']).to eq({
+        'types' => %w(StructuredError StandardError),
+        'backtrace' => ['/foo:1', '/bar:2'],
+        'error' => { 'foo' => 'bar' }
+      })
     end
   end
 
