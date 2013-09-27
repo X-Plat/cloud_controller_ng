@@ -7,8 +7,13 @@ module VCAP::CloudController
     let(:guid) { Sham.guid }
 
     after { VCAP::Request.current_id = nil }
+
     before do
       VCAP::CloudController::SecurityContext.stub(:current_user_email) { email }
+
+      # TODO: Remove this double after broker api calls are made asynchronous
+      client = double('broker client', unbind: nil, deprovision: nil)
+      Service.any_instance.stub(:client).and_return(client)
     end
 
     it_behaves_like "a CloudController model", {
@@ -70,6 +75,16 @@ module VCAP::CloudController
         it "should deprovision a service on destroy" do
           service_instance.client.should_receive(:deprovision).with(service_instance)
           service_instance.destroy
+        end
+      end
+
+      context "when deprovision fails" do
+        it "should raise and rollback" do
+          service_instance.client.stub(:deprovision).and_raise
+          expect {
+            service_instance.destroy
+          }.to raise_error
+          VCAP::CloudController::ManagedServiceInstance.find(id: service_instance.id).should be
         end
       end
     end
