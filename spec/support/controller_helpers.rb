@@ -60,7 +60,11 @@ module ControllerHelpers
   end
 
   def decoded_response(options={})
-    Yajl::Parser.parse(last_response.body, options)
+    parse(last_response.body, options)
+  end
+
+  def parse(json, options={})
+    Yajl::Parser.parse(json, options)
   end
 
   def metadata
