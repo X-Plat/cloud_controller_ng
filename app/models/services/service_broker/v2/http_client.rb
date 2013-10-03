@@ -1,9 +1,73 @@
 module VCAP::CloudController
   module ServiceBroker::V2
-    class ServiceBrokerBadResponse < HttpError
-      def initialize(endpoint, response)
-        msg = "The service broker API returned an error from #{endpoint}: #{response.code} #{response.reason}"
-        super(msg, response)
+
+    class ServiceBrokerBadResponse < HttpResponseError
+      def initialize(uri, method, response)
+        super(
+          "The service broker API returned an error from #{uri}: #{response.code} #{response.reason}",
+          uri,
+          method,
+          response
+        )
+      end
+    end
+
+    class ServiceBrokerApiUnreachable < HttpRequestError
+      def initialize(uri, method, source)
+        super(
+          "The service broker API could not be reached: #{uri}",
+          uri,
+          method,
+          source
+        )
+      end
+    end
+
+    class ServiceBrokerApiTimeout < HttpRequestError
+      def initialize(uri, method, source)
+        super(
+          "The service broker API timed out: #{uri}",
+          uri,
+          method,
+          source
+        )
+      end
+    end
+
+    class ServiceBrokerResponseMalformed < HttpResponseError
+      def initialize(uri, method, response)
+        super(
+          "The service broker response was not understood",
+          uri,
+          method,
+          response
+        )
+      end
+    end
+
+    class ServiceBrokerApiAuthenticationFailed < HttpResponseError
+      def initialize(uri, method, response)
+        super(
+          "Authentication failed for the service broker API. Double-check that the token is correct: #{uri}",
+          uri,
+          method,
+          response
+        )
+      end
+    end
+
+    class ServiceBrokerConflict < HttpResponseError
+      def initialize(uri, method, response)
+        super(
+          "Resource already exists: #{uri}",
+          uri,
+          method,
+          response
+        )
+      end
+
+      def response_code
+        409
       end
     end
 
@@ -62,16 +126,18 @@ module VCAP::CloudController
 
         begin
           response = http.send(method, endpoint, header: headers, body: body)
-        rescue SocketError, HTTPClient::ConnectTimeoutError, Errno::ECONNREFUSED
-          raise VCAP::Errors::ServiceBrokerApiUnreachable.new(endpoint)
-        rescue HTTPClient::KeepAliveDisconnected, HTTPClient::ReceiveTimeoutError
-          raise VCAP::Errors::ServiceBrokerApiTimeout.new(endpoint)
+        rescue SocketError, HTTPClient::ConnectTimeoutError, Errno::ECONNREFUSED => error
+          raise ServiceBrokerApiUnreachable.new(endpoint, method, error)
+        rescue HTTPClient::KeepAliveDisconnected, HTTPClient::ReceiveTimeoutError => error
+          raise ServiceBrokerApiTimeout.new(endpoint, method, error)
         end
 
         code = response.code.to_i
         case code
+
         when 204
-          nil # no body
+          return nil # no body
+
         when 200..299
           begin
             response_hash = Yajl::Parser.parse(response.body)
@@ -79,18 +145,29 @@ module VCAP::CloudController
           end
 
           unless response_hash.is_a?(Hash)
-            raise VCAP::Errors::ServiceBrokerResponseMalformed.new(endpoint)
+            raise ServiceBrokerResponseMalformed.new(endpoint, method, response)
           end
 
           return response_hash
 
         when HTTP::Status::UNAUTHORIZED
-          raise VCAP::Errors::ServiceBrokerApiAuthenticationFailed.new(endpoint)
+          raise ServiceBrokerApiAuthenticationFailed.new(endpoint, method, response)
+
         when 409
-          raise VCAP::Errors::ServiceBrokerConflict.new(endpoint)
-        else
-          raise ServiceBrokerBadResponse.new(endpoint, response)
+          raise ServiceBrokerConflict.new(endpoint, method, response)
+
+        when 410
+          if method == :delete
+            logger.warn("Already deleted: #{path}")
+            return nil
+          end
         end
+
+        raise ServiceBrokerBadResponse.new(endpoint, method, response)
+      end
+
+      def logger
+        @logger ||= Steno.logger("cc.service_broker.v2.http_client")
       end
     end
   end

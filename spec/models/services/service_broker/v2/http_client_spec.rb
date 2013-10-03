@@ -1,34 +1,131 @@
 require 'spec_helper'
 
-module VCAP::CloudController
-  describe ServiceBroker::V2::ServiceBrokerBadResponse do
-    let(:endpoint) { 'http://www.example.com/' }
+module VCAP::CloudController::ServiceBroker::V2
+
+  describe ServiceBrokerBadResponse do
+    let(:uri) { 'http://www.example.com/' }
     let(:response_body) do
       { 'foo' => 'bar' }.to_json
     end
     let(:response) { double(code: 500, reason: 'Internal Server Error', body: response_body) }
+    let(:method) { 'PUT' }
 
     it 'generates the correct hash' do
-      exception = described_class.new(endpoint, response)
+      exception = described_class.new(uri, method, response)
       exception.set_backtrace(['/foo:1', '/bar:2'])
 
       expect(exception.to_h).to eq({
         'description' => "The service broker API returned an error from http://www.example.com/: 500 Internal Server Error",
-        'error' => {
-          'types' => ["VCAP::CloudController::ServiceBroker::V2::ServiceBrokerBadResponse", "HttpError", "StructuredError", "StandardError"],
-          'backtrace' => ['/foo:1', '/bar:2'],
-          'error' => { 'foo' => 'bar' }
-        }
+        'types' => ["ServiceBrokerBadResponse", "HttpResponseError"],
+        'backtrace' => ['/foo:1', '/bar:2'],
+        "http" => {
+          "status" => 500,
+          "uri" => uri,
+          "method" => "PUT"
+        },
+        'source' => {'foo' => 'bar'}
       })
     end
   end
 
-  describe ServiceBroker::V2::HttpClient do
+  describe ServiceBrokerApiUnreachable do
+    let(:uri) { 'http://www.example.com/' }
+    let(:error) { SocketError.new('some message') }
+
+    before do
+      error.set_backtrace(['/socketerror:1', '/backtrace:2'])
+    end
+
+    it 'generates the correct hash' do
+      exception = ServiceBrokerApiUnreachable.new(uri, 'PUT', error)
+      exception.set_backtrace(['/generatedexception:3', '/backtrace:4'])
+
+      expect(exception.to_h).to eq({
+        'description' => 'The service broker API could not be reached: http://www.example.com/',
+        'types' => [
+          'ServiceBrokerApiUnreachable',
+          'HttpRequestError',
+        ],
+        'backtrace' => ['/generatedexception:3', '/backtrace:4'],
+        'http' => {
+          'uri' => uri,
+          'method' => 'PUT'
+        },
+        'source' => {
+          'description' => error.message,
+          'types' => ['SocketError'],
+          'backtrace' => ['/socketerror:1', '/backtrace:2']
+          }
+      })
+    end
+  end
+
+  describe 'the remaining ServiceBroker::V2 exceptions' do
+    let(:uri) { 'http://uri.example.com' }
+    let(:method) { 'POST' }
+    let(:error) { StandardError.new }
+
+    describe ServiceBrokerApiTimeout do
+      it "initializes the base class correctly" do
+        exception = ServiceBrokerApiTimeout.new(uri, method, error)
+        expect(exception.message).to eq("The service broker API timed out: #{uri}")
+        expect(exception.uri).to be(uri)
+        expect(exception.method).to be(method)
+        expect(exception.source).to be(error)
+      end
+    end
+
+    describe ServiceBrokerResponseMalformed do
+      let(:response_body) { 'foo' }
+      let(:response) { double(code: 200, reason: 'OK', body: response_body) }
+
+      it "initializes the base class correctly" do
+        exception = ServiceBrokerResponseMalformed.new(uri, method, response)
+        expect(exception.message).to eq("The service broker response was not understood")
+        expect(exception.uri).to be(uri)
+        expect(exception.method).to be(method)
+        expect(exception.source).to be(response.body)
+      end
+    end
+
+    describe ServiceBrokerApiAuthenticationFailed do
+      let(:response_body) { 'foo' }
+      let(:response) { double(code: 401, reason: 'Auth Error', body: response_body) }
+
+      it "initializes the base class correctly" do
+        exception = ServiceBrokerApiAuthenticationFailed.new(uri, method, response)
+        expect(exception.message).to eq("Authentication failed for the service broker API. Double-check that the token is correct: #{uri}")
+        expect(exception.uri).to be(uri)
+        expect(exception.method).to be(method)
+        expect(exception.source).to be(response.body)
+      end
+    end
+
+    describe ServiceBrokerConflict do
+      let(:response_body) { 'foo' }
+      let(:response) { double(code: 409, reason: 'Conflict', body: response_body) }
+
+      it "initializes the base class correctly" do
+        exception = ServiceBrokerConflict.new(uri, method, response)
+        expect(exception.message).to eq("Resource already exists: #{uri}")
+        expect(exception.uri).to be(uri)
+        expect(exception.method).to be(method)
+        expect(exception.source).to be(response.body)
+      end
+
+      it "has a response_code of 409" do
+        exception = ServiceBrokerConflict.new(uri, method, response)
+        expect(exception.response_code).to eq(409)
+      end
+    end
+  end
+
+  describe HttpClient do
     let(:auth_token) { 'abc123' }
     let(:request_id) { Sham.guid }
 
     subject(:client) do
-      ServiceBroker::V2::HttpClient.new(
+      HttpClient.new(
         url: 'http://broker.example.com',
         auth_token: auth_token
       )
@@ -108,13 +205,14 @@ module VCAP::CloudController
           stub_request(:put, "http://cc:#{auth_token}@broker.example.com/v2/service_instances/#{instance_id}").
             to_return(status: 409)  # 409 is CONFLICT
 
-          expect { client.provision(instance_id, plan_id, "org-guid", "space-guid") }.to raise_error(VCAP::Errors::ServiceBrokerConflict)
+          expect { client.provision(instance_id, plan_id, "org-guid", "space-guid") }.
+            to raise_error(ServiceBrokerConflict)
         end
       end
     end
 
     describe '#bind' do
-      let(:service_binding) { ServiceBinding.make }
+      let(:service_binding) { VCAP::CloudController::ServiceBinding.make }
       let(:service_instance) { service_binding.service_instance }
 
       let(:bind_url) { "http://cc:#{auth_token}@broker.example.com/v2/service_bindings/#{service_binding.guid}" }
@@ -160,7 +258,7 @@ module VCAP::CloudController
     end
 
     describe '#unbind' do
-      let(:service_binding) { ServiceBinding.make }
+      let(:service_binding) { VCAP::CloudController::ServiceBinding.make }
       let(:bind_url) { "http://cc:#{auth_token}@broker.example.com/v2/service_bindings/#{service_binding.guid}" }
       before do
         @request = stub_request(:delete, bind_url).to_return(status: 204)
@@ -173,7 +271,7 @@ module VCAP::CloudController
     end
 
     describe '#deprovision' do
-      let(:instance) { ManagedServiceInstance.make }
+      let(:instance) { VCAP::CloudController::ManagedServiceInstance.make }
       let(:instance_url) { "http://cc:#{auth_token}@broker.example.com/v2/service_instances/#{instance.guid}" }
       before do
         @request = stub_request(:delete, instance_url).to_return(status: 204)
@@ -197,7 +295,7 @@ module VCAP::CloudController
           it 'should raise an unreachable error' do
             expect {
               client.catalog
-            }.to raise_error(VCAP::CloudController::Errors::ServiceBrokerApiUnreachable)
+            }.to raise_error(VCAP::CloudController::ServiceBroker::V2::ServiceBrokerApiUnreachable)
           end
         end
 
@@ -209,7 +307,7 @@ module VCAP::CloudController
           it 'should raise an unreachable error' do
             expect {
               client.catalog
-            }.to raise_error(VCAP::CloudController::Errors::ServiceBrokerApiUnreachable)
+            }.to raise_error(VCAP::CloudController::ServiceBroker::V2::ServiceBrokerApiUnreachable)
           end
         end
 
@@ -221,7 +319,7 @@ module VCAP::CloudController
           it 'should raise an unreachable error' do
             expect {
               client.catalog
-            }.to raise_error(VCAP::CloudController::Errors::ServiceBrokerApiUnreachable)
+            }.to raise_error(VCAP::CloudController::ServiceBroker::V2::ServiceBrokerApiUnreachable)
           end
         end
       end
@@ -238,7 +336,7 @@ module VCAP::CloudController
           it 'should raise a timeout error' do
             expect {
               client.catalog
-            }.to raise_error(VCAP::CloudController::Errors::ServiceBrokerApiTimeout)
+            }.to raise_error(VCAP::CloudController::ServiceBroker::V2::ServiceBrokerApiTimeout)
           end
         end
 
@@ -250,7 +348,7 @@ module VCAP::CloudController
           it 'should raise a timeout error' do
             expect {
               client.catalog
-            }.to raise_error(VCAP::CloudController::Errors::ServiceBrokerApiTimeout)
+            }.to raise_error(VCAP::CloudController::ServiceBroker::V2::ServiceBrokerApiTimeout)
           end
         end
       end
@@ -271,10 +369,8 @@ module VCAP::CloudController
             expect(e).to be_a(VCAP::CloudController::ServiceBroker::V2::ServiceBrokerBadResponse)
             error_hash = e.to_h
             error_hash.fetch('description').should eq('The service broker API returned an error from http://broker.example.com/v2/catalog: 500 Internal Server Error')
-            error_hash.fetch('error').should include({
-              'types' => ['VCAP::CloudController::ServiceBroker::V2::ServiceBrokerBadResponse', 'HttpError', 'StructuredError', 'StandardError'],
-              'error' => { 'foo' => 'bar' }
-            })
+            error_hash.fetch('types').should include('ServiceBrokerBadResponse', 'HttpResponseError')
+            error_hash.fetch('source').should include({ 'foo' => 'bar' })
           }
         end
       end
@@ -307,7 +403,7 @@ module VCAP::CloudController
           it 'should raise an invalid response error' do
             expect {
               client.catalog
-            }.to raise_error(VCAP::CloudController::Errors::ServiceBrokerResponseMalformed)
+            }.to raise_error(VCAP::CloudController::ServiceBroker::V2::ServiceBrokerResponseMalformed)
           end
         end
 
@@ -319,7 +415,7 @@ module VCAP::CloudController
           it 'should raise an invalid response error' do
             expect {
               client.catalog
-            }.to raise_error(VCAP::CloudController::Errors::ServiceBrokerResponseMalformed)
+            }.to raise_error(VCAP::CloudController::ServiceBroker::V2::ServiceBrokerResponseMalformed)
           end
         end
       end
@@ -332,7 +428,25 @@ module VCAP::CloudController
         it 'should raise an authentication error' do
           expect {
             client.catalog
-          }.to raise_error(VCAP::CloudController::Errors::ServiceBrokerApiAuthenticationFailed)
+          }.to raise_error{ |e|
+            expect(e).to be_a(VCAP::CloudController::ServiceBroker::V2::ServiceBrokerApiAuthenticationFailed)
+            error_hash = e.to_h
+            error_hash.fetch('description').
+              should eq("Authentication failed for the service broker API. Double-check that the token is correct: http://broker.example.com/v2/catalog")
+          }
+        end
+      end
+
+      context 'when the API returns 410 to a DELETE request' do
+        before do
+          @stub = stub_request(:delete, "http://cc:#{auth_token}@broker.example.com/v2/service_instances/asdf").to_return(
+            status: [410, 'Gone']
+          )
+        end
+
+        it 'should swallow the error' do
+          expect(client.deprovision('asdf')).to be_nil
+          @stub.should have_been_requested
         end
       end
     end

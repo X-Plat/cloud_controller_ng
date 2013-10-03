@@ -154,12 +154,28 @@ module VCAP::CloudController
             droplet.exists?
           }.from(false).to(true)
         end
+
+        it "deletes the uploaded file" do
+          FileUtils.should_receive(:rm_f).with(/ngx\.uploads/)
+          post "/staging/droplets/#{app_obj.guid}/upload", upload_req
+        end
       end
 
       context "with an invalid app" do
         it "returns 404" do
           post "/staging/droplets/bad-app/upload", upload_req
           last_response.status.should == 404
+        end
+
+        context "when the upload path is nil" do
+          let(:upload_req) do
+            {upload: {droplet: nil}}
+          end
+
+          it "deletes the uploaded file" do
+            FileUtils.should_not_receive(:rm_f)
+            post "/staging/droplets/#{app_obj.guid}/upload", upload_req
+          end
         end
       end
 
@@ -256,12 +272,28 @@ module VCAP::CloudController
             )
           }.from(false).to(true)
         end
+
+        it "deletes the temp uploaded files" do
+          FileUtils.should_receive(:rm_f).with(/ngx\.uploads/)
+          post "/staging/buildpack_cache/#{app_obj.guid}/upload", upload_req
+        end
       end
 
       context "with an invalid app" do
         it "returns 404" do
           post "/staging/buildpack_cache/bad-app/upload", upload_req
           last_response.status.should == 404
+        end
+
+        context "when the upload path is nil" do
+          let(:upload_req) do
+            {upload: {droplet: nil}}
+          end
+
+          it "deletes the uploaded file" do
+            FileUtils.should_not_receive(:rm_f)
+            post "/staging/buildpack_cache/#{app_obj.guid}/upload", upload_req
+          end
         end
       end
     end
