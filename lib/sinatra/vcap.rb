@@ -22,7 +22,8 @@ module Sinatra
       def error_payload(exception)
         payload = {
           'code' => 10001,
-          'description' => exception.message
+          'description' => exception.message,
+          'error_code' => "CF-#{Hashify.demodulize(exception.class)}"
         }
 
         if exception.respond_to?(:error_code)
@@ -34,6 +35,9 @@ module Sinatra
         else
           payload.merge!(Hashify.exception(exception))
         end
+
+        # Temporarily remove this key pending security review
+        payload.delete('source')
 
         Yajl::Encoder.encode(payload)
       end

@@ -55,6 +55,15 @@ module VCAP::CloudController
         end
       end
 
+      def self.it_handles_hm9000_requests
+        it "starts handling hm9000 requests" do
+          hm9000respondent = double(:hm9000respondent)
+          HM9000Respondent.should_receive(:new).with(DeaClient, message_bus, true).and_return(hm9000respondent)
+          hm9000respondent.should_receive(:handle_requests)
+          subject.run!
+        end
+      end
+
       def self.it_registers_a_log_counter
         it "registers a log counter with the component" do
           log_counter = Steno::Sink::Counter.new
@@ -82,6 +91,7 @@ module VCAP::CloudController
         it_runs_dea_client
         it_runs_app_stager
         it_handles_health_manager_requests
+        it_handles_hm9000_requests
 
         # This shouldn't be inside here but unless we run under this wrapper we
         # end up with state pollution and other tests fail. Should be refactored.
@@ -178,6 +188,7 @@ module VCAP::CloudController
         it_runs_dea_client
         it_runs_app_stager
         it_handles_health_manager_requests
+        it_handles_hm9000_requests
       end
     end
 

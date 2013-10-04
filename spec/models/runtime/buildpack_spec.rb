@@ -4,10 +4,10 @@ module VCAP::CloudController
   describe Buildpack, type: :model do
     describe "validations" do
       it "enforces unique names" do
-       Buildpack.create(:name => "my custom buildpack", :key => "xyz", :priority => 0)
+       Buildpack.create(:name => "my_custom_buildpack", :key => "xyz", :priority => 0)
 
         expect {
-          Buildpack.create(:name => "my custom buildpack", :key => "xxxx", :priority =>0)
+          Buildpack.create(:name => "my_custom_buildpack", :key => "xxxx", :priority =>0)
         }.to raise_error(Sequel::ValidationFailed, /name unique/)
       end
     end
@@ -35,12 +35,6 @@ module VCAP::CloudController
         expect(list).to have(2).items
         expect(list).to include(url: buildpack_blobstore.download_uri("a key"), key: "a key")
         expect(list).to include(url: buildpack_blobstore.download_uri("b key"), key: "b key")
-      end
-
-      it "returns only one admin buildpack when given an app with an admin_buildpack" do
-        list = Buildpack.list_admin_buildpacks(CloudController::DependencyLocator.instance.blobstore_url_generator, @buildpack)
-        expect(list).to have(1).item
-        expect(list).to include(url: buildpack_blobstore.download_uri("a key"), key: "a key")
       end
     end
   end

@@ -52,7 +52,6 @@ describe "Service Instance Management", :type => :integration do
   let(:space_guid) { space.json_body.fetch("metadata").fetch("guid") }
 
   specify "User creates an instance of a v2 service" do
-    pending "annoying"
     register_service_broker
     create_service_instance
     create_application
@@ -100,7 +99,8 @@ describe "Service Instance Management", :type => :integration do
   def register_service_broker
     body = JSON.dump(
       broker_url: "http://localhost:54329",
-      token: "supersecretshh",
+      auth_username: "cc",
+      auth_password: "supersecretshh",
       name: "BrokerDrug",
     )
 
