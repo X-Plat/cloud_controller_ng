@@ -14,7 +14,10 @@ resource "Buildpacks", :type => :api do
   let(:guid) { VCAP::CloudController::Buildpack.first.guid }
 
   standard_parameters
-  response_fields_from_table :buildpack
+
+  field :name, "The name of the buildpack. To be used by app buildpack field.", required: true
+  field :priority, "The order in which the buildpacks are checked during buildpack auto-detection.", required: false, readonly: true
+
   standard_model_object :buildpack
 
   post "/v2/buildpacks" do
@@ -38,7 +41,6 @@ resource "Buildpacks", :type => :api do
       zip_name = File.join(tmpdir, filename)
       create_zip(zip_name, 1)
       zip_file = File.new(zip_name)
-      p zip_name
       Rack::Test::UploadedFile.new(zip_file)
     end
 
