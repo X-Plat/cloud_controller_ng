@@ -17,6 +17,9 @@ module VCAP::CloudController
     class AlreadyDeletedError < StandardError;
     end
 
+    class ApplicationMissing < RuntimeError
+    end
+
     dataset_module do
       def existing
         filter(not_deleted: true)
@@ -40,7 +43,9 @@ module VCAP::CloudController
     many_to_one :space
     many_to_one :stack
 
-    many_to_many :routes, :before_add => :validate_route, :after_add => :mark_routes_changed, :after_remove => :mark_routes_changed
+    many_to_many :routes, :before_add => :validate_route,
+      :after_add => :mark_routes_changed,
+      :after_remove => :mark_routes_changed
 
     add_association_dependencies :routes => :nullify,
       :service_bindings => :destroy, :events => :destroy
@@ -122,7 +127,7 @@ module VCAP::CloudController
 
     def before_create
       super
-      self.version = SecureRandom.uuid unless self.version
+      set_new_version
     end
 
     def before_save
@@ -135,23 +140,26 @@ module VCAP::CloudController
 
       self.stack ||= Stack.default
 
-      # The reason this is only done on a state change is that we really only
-      # care about the state when we transitioned from stopped to running.  The
-      # current semantics of changing memory or bindings is that they don't
-      # take effect until after the app is restarted.  This allows clients to
-      # batch a bunch of changes without having their app bounce.  If we were
-      # to change the version on every metadata change, the hm would cause them
-      # to get restarted prematurely.
-      #
-      # The dirty check on version allows a higher level to set the version.
-      # We might start populating this with the vcap request guid of an api
-      # request.
-      if (column_changed?(:state) || column_changed?(:memory)) && started?
-        self.version = SecureRandom.uuid if !column_changed?(:version)
-      end
+      set_new_version if version_needs_to_be_updated?
 
       AppStopEvent.create_from_app(self) if generate_stop_event?
       AppStartEvent.create_from_app(self) if generate_start_event?
+    end
+
+    def version_needs_to_be_updated?
+      # change version if:
+      #
+      # * transitioning to STARTED
+      # * memory is changed
+      # * routes are changed
+      #
+      # this is to indicate that the running state of an application has changed,
+      # and that the system should converge on this new version.
+      (column_changed?(:state) || column_changed?(:memory)) && started?
+    end
+
+    def set_new_version
+      self.version = SecureRandom.uuid
     end
 
     def generate_start_event?
@@ -280,6 +288,10 @@ module VCAP::CloudController
       return total_requested_memory if new?
 
       app_from_db = self.class.find(:guid => guid)
+      if app_from_db.nil?
+        logger.fatal("app.find.missing", :guid => guid)
+        raise ApplicationMissing, "Attempting to check memory quota. Should have been able to find app with guid #{guid}"
+      end
       total_existing_memory = app_from_db[:memory] * app_from_db[:instances]
       additional_memory = total_requested_memory - total_existing_memory
       return additional_memory if additional_memory > 0
@@ -507,6 +519,9 @@ module VCAP::CloudController
 
     def mark_routes_changed(_)
       @routes_changed = true
+
+      set_new_version
+      save
     end
 
     def generate_salt
