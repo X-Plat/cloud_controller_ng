@@ -8,8 +8,9 @@ module ApiDsl
 
       # refactor: pass exclusions, and figure out which are valid to not be there
       next if name.to_s == "guid"
-      next if name.to_s == "default_space_url"
-      next if name.to_s == "space_url"
+
+      # if a relationship is not present, its url should not be present
+      next if field_is_url_and_relationship_not_present?(json, name)
 
       json.should have_key name.to_s
       if expect.has_key? name.to_sym
@@ -26,6 +27,8 @@ module ApiDsl
   end
 
   def standard_entity_response json, model, expect={}
+    json.should include("metadata")
+    json.should include("entity")
     standard_metadata_response_format? json["metadata"]
     validate_response model, json["entity"], expect
   end
@@ -40,11 +43,17 @@ module ApiDsl
 
   def message_table model
     return model if model.respond_to? :fields
-    "VCAP::CloudController::#{model.to_s.capitalize.pluralize}Controller::ResponseMessage".constantize
+    "VCAP::CloudController::#{model.to_s.classify.pluralize}Controller::ResponseMessage".constantize
   end
 
   def parsed_response
     parse(response_body)
+  end
+
+  def field_is_url_and_relationship_not_present?(json, field)
+    if field =~ /(.*)_url$/
+      !json["#$1_guid".to_sym]
+    end
   end
 
   module ClassMethods
@@ -75,9 +84,10 @@ module ApiDsl
     end
 
     def standard_parameters
+      request_parameter :q, "Parameters used to filter the result set"
       request_parameter :limit, "Maximum number of results to return"
       request_parameter :offset, "Offset from which to start iteration"
-      request_parameter :'urls_only', "If 1, only return a list of urls; do not expand metadata or resource attributes"
+      request_parameter :urls_only, "If 1, only return a list of urls; do not expand metadata or resource attributes"
       request_parameter :'inline-relations-depth', "0 - don't inline any relations and return URLs.  Otherwise, inline to depth N."
     end
 
