@@ -5,7 +5,7 @@ module VCAP::CloudController
     let(:message_bus) { CfMessageBus::MockMessageBus.new }
     let(:stager_pool) { double(:stager_pool) }
     let(:config_hash) { { :config => 'hash' } }
-    let(:app) { App.make(:package_hash => "abc", :droplet_hash => nil, :package_state => "PENDING", :state => "STARTED", :instances => 1) }
+    let(:app) { AppFactory.make(:package_hash => "abc", :droplet_hash => nil, :package_state => "PENDING", :state => "STARTED", :instances => 1) }
     let(:stager_id) { "my_stager" }
     let(:blobstore_url_generator) { double.as_null_object }
 
@@ -16,7 +16,7 @@ module VCAP::CloudController
     let(:task_streaming_log_url) { "task-streaming-log-url" }
     let(:detected_buildpack) { nil }
     let(:droplet) do
-      CloudController::Droplet.new(app, StagingsController.blobstore)
+      CloudController::BlobstoreDroplet.new(app, StagingsController.blobstore)
     end
 
     let(:first_reply_json) do
@@ -430,7 +430,7 @@ module VCAP::CloudController
     end
 
     describe ".staging_request" do
-      let(:app) { App.make :droplet_hash => nil, :package_state => "PENDING" }
+      let(:app) { AppFactory.make :droplet_hash => nil, :package_state => "PENDING" }
       let(:dea_start_message) { { :dea_client_message => "start app message" } }
 
       before do

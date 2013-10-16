@@ -49,7 +49,7 @@ module VCAP::CloudController
     end
     let(:staging_config) { original_staging_config }
 
-    let(:app_obj) { App.make :droplet_hash => nil } # explicitly unstaged app
+    let(:app_obj) { AppFactory.make :droplet_hash => nil } # explicitly unstaged app
 
     before do
       Fog.unmock!
@@ -67,7 +67,7 @@ module VCAP::CloudController
     end
 
     describe "GET /staging/apps/:guid" do
-      let(:app_obj_without_pkg) { App.make }
+      let(:app_obj_without_pkg) { AppFactory.make }
 
       def self.it_downloads_staged_app
         it "succeeds for valid packages" do
@@ -150,7 +150,7 @@ module VCAP::CloudController
           expect {
             post "/staging/droplets/#{app_obj.guid}/upload", upload_req
           }.to change {
-            droplet = CloudController::Droplet.new(app_obj.refresh, StagingsController.blobstore)
+            droplet = CloudController::BlobstoreDroplet.new(app_obj.refresh, StagingsController.blobstore)
             droplet.exists?
           }.from(false).to(true)
         end
@@ -202,10 +202,8 @@ module VCAP::CloudController
             droplet_file.write("droplet contents")
             droplet_file.close
 
-            droplet = CloudController::Droplet.new(app_obj, StagingsController.blobstore)
+            droplet = CloudController::BlobstoreDroplet.new(app_obj, StagingsController.blobstore)
             droplet.save(droplet_file.path)
-
-            StagingsController.blobstore.exists?([app_obj.guid, app_obj.droplet_hash].join("/")).should be_true
 
             get "/staging/droplets/#{app_obj.guid}/download"
             last_response.status.should == 200
