@@ -1,5 +1,3 @@
-# Copyright (c) 2009-2012 VMware, Inc.
-
 require "vcap/stager/client"
 require "vcap/errors"
 
@@ -71,24 +69,18 @@ module VCAP::CloudController
           raise InstancesError.new(msg)
         end
 
-        num_instances = app.instances
-        message = {
-            :state => :FLAPPING,
-            :version => app.version,
-        }
-
-        flapping_indices = health_manager_client.find_status(app, message)
-
         all_instances = {}
-        if flapping_indices && flapping_indices["indices"]
-          flapping_indices["indices"].each do |entry|
-            index = entry["index"]
-            if index >= 0 && index < num_instances
-              all_instances[index] = {
-                  :state => "FLAPPING",
-                  :since => entry["since"],
-              }
-            end
+
+        num_instances = app.instances
+        flapping_indices = health_manager_client.find_flapping_indices(app)
+
+        flapping_indices.each do |entry|
+          index = entry["index"]
+          if index >= 0 && index < num_instances
+            all_instances[index] = {
+                :state => "FLAPPING",
+                :since => entry["since"],
+            }
           end
         end
 

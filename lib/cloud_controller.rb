@@ -1,5 +1,3 @@
-# Copyright (c) 2009-2012 VMware, Inc.
-
 require "bcrypt"
 require "sinatra"
 require "sequel"
@@ -20,6 +18,7 @@ require "cloud_controller/security_context"
 require "active_support/core_ext/hash"
 require "active_support/json/encoding"
 require "cloud_controller/models"
+require "cloud_controller/jobs"
 
 module VCAP::CloudController
   include VCAP::RestAPI
@@ -131,6 +130,7 @@ require "cloud_controller/dea/dea_respondent"
 require "cloud_controller/stager/stager_pool"
 
 require "cloud_controller/health_manager_client"
+require "cloud_controller/hm9000_client"
 require "cloud_controller/health_manager_respondent"
 require "cloud_controller/hm9000_respondent"
 
