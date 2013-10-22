@@ -5,13 +5,7 @@ resource "ServiceAuthTokens", :type => :api do
   let(:admin_auth_header) { headers_for(admin_user, :admin_scope => true)["HTTP_AUTHORIZATION"] }
   authenticated_request
 
-  before do
-    reset_database
-
-    3.times do
-      VCAP::CloudController::ServiceAuthToken.make
-    end
-  end
+  before { 3.times { VCAP::CloudController::ServiceAuthToken.make } }
 
   let(:guid) { VCAP::CloudController::ServiceAuthToken.first.guid }
 
@@ -34,7 +28,7 @@ resource "ServiceAuthTokens", :type => :api do
         VCAP::CloudController::ServiceAuthToken.make :label => "Nic-Token"
       end
 
-      example "filters the result set to the given label" do
+      example "Filtering the result set by label" do
         client.get "/v2/service_auth_tokens", params, headers
 
         status.should == 200
@@ -57,7 +51,7 @@ resource "ServiceAuthTokens", :type => :api do
         VCAP::CloudController::ServiceAuthToken.make :provider => "Face-Offer"
       end
 
-      example "filters the result set to the given label" do
+      example "Filtering the result set by provider" do
         client.get "/v2/service_auth_tokens", params, headers
 
         status.should == 200

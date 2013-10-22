@@ -9,10 +9,6 @@ module VCAP::CloudController
 
     subject(:broker) { ServiceBroker.new(name: name, broker_url: broker_url, auth_username: auth_username, auth_password: auth_password) }
 
-    before do
-      reset_database
-    end
-
     it_behaves_like 'a model with an encrypted attribute' do
       let(:encrypted_attr) { :auth_password }
     end
@@ -184,6 +180,30 @@ module VCAP::CloudController
           expect(plan.free).to be_true
         end
 
+        context 'and the catalog has no plans' do
+          let(:catalog) do
+            {
+              'services' => [
+                {
+                  'id' => service_id,
+                  'name' => service_name,
+                  'description' => service_description,
+                  'bindable' => true,
+                  'tags' => ['mysql', 'relational'],
+                  'plans' => []
+                }
+              ]
+            }
+          end
+
+          it 'marks the service as inactive' do
+            expect(service.active?).to be_true
+            broker.load_catalog
+            service.reload
+            expect(service.active?).to be_false
+          end
+        end
+
         context 'and a plan already exists' do
           let!(:plan) do
             ServicePlan.make(
@@ -205,6 +225,32 @@ module VCAP::CloudController
             expect(plan.description).to eq(plan_description)
           end
         end
+
+        context 'and a plan exists that has been removed from the broker catalog' do
+          let!(:plan) do
+            ServicePlan.make(
+              service: service,
+              unique_id: 'nolongerexists'
+            )
+          end
+
+          it 'deletes the plan from the db' do
+            broker.load_catalog
+            expect(ServicePlan.find(:id => plan.id)).to be_nil
+          end
+
+          context 'when an instance for the plan exists' do
+            it 'marks the existing plan as inactive' do
+              ManagedServiceInstance.make(service_plan: plan)
+              expect(plan.active?).to be_true
+
+              broker.load_catalog
+              plan.reload
+
+              expect(plan.active?).to be_false
+            end
+          end
+        end
       end
     end
 
@@ -223,7 +269,7 @@ module VCAP::CloudController
         service = Service.make(:service_broker => service_broker)
         expect {
           begin
-            service_broker.destroy
+            service_broker.destroy(savepoint: true)
           rescue Sequel::ForeignKeyConstraintViolation
           end
         }.to change {
@@ -238,7 +284,7 @@ module VCAP::CloudController
           ManagedServiceInstance.make(:service_plan => service_plan)
           expect {
             begin
-              service_broker.destroy
+              service_broker.destroy(savepoint: true)
             rescue Sequel::ForeignKeyConstraintViolation
             end
           }.to_not change {

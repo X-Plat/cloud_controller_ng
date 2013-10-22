@@ -5,13 +5,7 @@ resource "Domains", :type => :api do
   let(:admin_auth_header) { headers_for(admin_user, :admin_scope => true)["HTTP_AUTHORIZATION"] }
   authenticated_request
 
-  before do
-    reset_database
-
-    3.times do
-      VCAP::CloudController::Domain.make
-    end
-  end
+  before { 3.times { VCAP::CloudController::Domain.make } }
 
   let(:guid) { VCAP::CloudController::Domain.first.guid }
 
@@ -30,7 +24,7 @@ resource "Domains", :type => :api do
     let(:name) { "exmaple.com" }
     let(:wildcard) { true }
 
-    context "without a owning organization" do
+    context "Creating a shared domain" do
       let(:owning_organization_guid) { nil }
 
       example "creates a shared domain" do
@@ -42,7 +36,7 @@ resource "Domains", :type => :api do
       end
     end
 
-    context "with an owning organization" do
+    context "Creating a domain owned by an organization" do
       let(:owning_organization) { VCAP::CloudController::Organization.make }
       let(:owning_organization_guid) { owning_organization.guid }
 
