@@ -492,10 +492,6 @@ module VCAP::CloudController
                            :instances => 1)
         end
 
-        after do
-          app_obj.delete
-        end
-
         it "stages the app asynchronously" do
           received_app = nil
 
