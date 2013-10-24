@@ -52,9 +52,8 @@ put '/v2/service_instances/:service_instance_id' do
   [201, {}, body]
 end
 
-put '/v2/service_bindings/:service_binding_id' do
+put '/v2/service_instances/:service_instance_id/service_bindings/:service_binding_id' do
   json = JSON.parse(request.body.read)
-  raise 'missing service_instance_id' unless json['service_instance_id']
 
   @@binding_count += 1
 
@@ -68,7 +67,7 @@ put '/v2/service_bindings/:service_binding_id' do
   [200, {}, body]
 end
 
-delete '/v2/service_bindings/:service_binding_id' do
+delete '/v2/service_instances/:service_instance_id/service_bindings/:service_binding_id' do
   @@binding_count -= 1
 
   [204, {}, '']
