@@ -53,14 +53,16 @@ module VCAP::CloudController
     # @param [String] guid The GUID of the object to delete.
     def delete(guid)
       app = find_guid_and_validate_access(:delete, guid)
+
       recursive = params["recursive"] == "true"
+      Event.record_app_delete(app, SecurityContext.current_user, recursive)
+
       if !recursive && app.service_bindings.present?
         raise VCAP::Errors::AssociationNotEmpty.new("service_bindings", app.class.table_name)
       end
 
       app.db.transaction(savepoint: true) do
         app.soft_delete
-        Event.record_app_delete(app, SecurityContext.current_user)
       end
 
       [ HTTP::NO_CONTENT, nil ]
@@ -68,10 +70,11 @@ module VCAP::CloudController
 
     def update(guid)
       app = find_for_update(guid)
+      Event.record_app_update(app, SecurityContext.current_user, request_attrs)
+
       model.db.transaction(savepoint: true) do
         app.lock!
         app.update_from_hash(request_attrs)
-        Event.record_app_update(app, SecurityContext.current_user) if app.previous_changes
         Loggregator.emit(guid, "Updated app with guid #{guid}")
       end
 
@@ -94,16 +97,18 @@ module VCAP::CloudController
       model.db.transaction(savepoint: true) do
         obj = model.create_from_hash(request_attrs)
         validate_access(:create, obj, user, roles)
-        Event.record_app_create(obj, SecurityContext.current_user)
       end
 
       after_create(obj)
+      created_app = obj
       Loggregator.emit(obj.guid, "Created app with guid #{obj.guid}")
 
       [ HTTP::CREATED,
         { "Location" => "#{self.class.path}/#{obj.guid}" },
         serialization.render_json(self.class, obj, @opts)
       ]
+    ensure
+      Event.record_app_create(created_app, SecurityContext.current_user, request_attrs) if request_attrs
     end
 
     private

@@ -19,6 +19,10 @@ module VCAP::CloudController
       :actee_type, :timestamp, :metadata, :space_guid,
       :organization_guid
 
+    def metadata
+      super || {}
+    end
+
     def space
       super || DeletedSpace.new
     end
@@ -55,7 +59,7 @@ module VCAP::CloudController
       )
     end
 
-    def self.record_app_update(app, actor)
+    def self.record_app_update(app, actor, request_attrs)
       create(
         space: app.space,
         type: "audit.app.update",
@@ -65,31 +69,29 @@ module VCAP::CloudController
         actor_type: "user",
         timestamp: Time.now,
         metadata: {
-          changes: app.auditable_changes,
-          footprints: {
-            memory: app.memory,
-            instances: app.instances,
+          request: App.audit_hash(request_attrs)
+        }
+      )
+    end
+
+    def self.record_app_create(app, actor, request_attrs)
+      opts = {
+          type: "audit.app.create",
+          actee: app.nil? ? "0" : app.guid,
+          actee_type: "app",
+          actor: actor.guid,
+          actor_type: "user",
+          timestamp: Time.now,
+          metadata: {
+            request: App.audit_hash(request_attrs)
           }
-        }
-      )
+      }
+      opts[:space] = app.space unless app.nil?
+
+      create(opts)
     end
 
-    def self.record_app_create(app, actor)
-      create(
-        space: app.space,
-        type: "audit.app.create",
-        actee: app.guid,
-        actee_type: "app",
-        actor: actor.guid,
-        actor_type: "user",
-        timestamp: Time.now,
-        metadata: {
-          changes: app.auditable_values,
-        }
-      )
-    end
-
-    def self.record_app_delete(deleting_app, actor)
+    def self.record_app_delete(deleting_app, actor, recursive)
       create(
         space: deleting_app.space,
         type: "audit.app.delete",
@@ -99,6 +101,7 @@ module VCAP::CloudController
         actor_type: "user",
         timestamp: Time.now,
         metadata: {
+          request: { recursive: recursive }
         }
       )
     end

@@ -99,6 +99,11 @@ describe "Service Broker Management", type: :integration do
     catalog_response = make_get_request('/v2/services?inline-relations-depth=1', admin_headers)
     expect(catalog_response.code.to_i).to eq(200)
 
+    ensure_service_is_correct(catalog_response)
+    ensure_plans_are_correct(catalog_response)
+  end
+
+  def ensure_service_is_correct(catalog_response)
     services = catalog_response.json_body.fetch('resources')
     service = services.first
 
@@ -106,9 +111,38 @@ describe "Service Broker Management", type: :integration do
     expect(service_entity.fetch('label')).to eq('custom-service')
     expect(service_entity.fetch('bindable')).to eq(true)
     expect(service_entity.fetch('tags')).to match_array(['mysql', 'relational'])
+    expect(JSON.parse(service_entity.fetch('extra'))).to eq(
+      'listing' => {
+        'imageUrl' => 'http://example.com/catsaresofunny.gif',
+        'blurb' => 'A very fine service',
+      }
+    )
+  end
+
+  def ensure_plans_are_correct(catalog_response)
+    service_entity = catalog_response.json_body.fetch('resources').first.fetch('entity')
 
     plans = service_entity.fetch('service_plans')
     expect(plans.length).to eq(2)
+
+    free_plan = plans.detect {|p| p.fetch('entity').fetch('name') == 'free' }
+    free_plan_entity = free_plan.fetch('entity')
+    expect(free_plan_entity.fetch('description')).to eq('A description of the Free plan')
+    expect(JSON.parse(free_plan_entity.fetch('extra'))).to eq(
+      'cost' => 0.0,
+      'bullets' =>
+        [
+          {'content' => 'Shared MySQL server'},
+          {'content' => '100 MB storage'},
+          {'content' => '40 concurrent connections'},
+        ]
+    )
+
+
+    also_free_plan = plans.detect {|p| p.fetch('entity').fetch('name') == 'also free' }
+    also_free_plan_entity = also_free_plan.fetch('entity')
+    expect(also_free_plan_entity.fetch('description')).to eq('Two for twice the price!')
+    expect(also_free_plan_entity.fetch('extra')).to be_nil
   end
 
   describe 'removing a service broker' do

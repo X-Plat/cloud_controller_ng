@@ -113,16 +113,31 @@ module VCAP::CloudController
         end
       end
 
-      it "records a app.create event" do
-        create_app
+      describe "audit logs" do
+        it "records an app.create event" do
+          create_app
 
-        last_response.status.should == 201
+          last_response.status.should == 201
 
-        new_app_guid = decoded_response['metadata']['guid']
-        event = Event.find(:type => "audit.app.create", :actee => new_app_guid)
+          new_app_guid = decoded_response['metadata']['guid']
+          event = Event.find(:type => "audit.app.create", :actee => new_app_guid)
 
-        expect(event).to be
-        expect(event.actor).to eq(admin_user.guid)
+          expect(event).to be
+          expect(event.actor).to eq(admin_user.guid)
+          expect(event.metadata["request"]["name"]).to eq("maria")
+          expect(event.metadata["request"]["space_guid"]).to eq(space_guid)
+        end
+
+        it "records a create failed event when unauthorized" do
+          VCAP::CloudController::RestController::ModelController.any_instance.should_receive(:validate_access).and_raise(VCAP::CloudController::Errors::NotAuthorized)
+          create_app
+
+          last_response.status.should == 403
+          event = Event.find(:type => "audit.app.create", :actee => "0")
+
+          expect(event).to be
+          expect(event.metadata["request"]["name"]).to eq("maria")
+        end
       end
 
       context "buildpacks" do
@@ -278,6 +293,63 @@ module VCAP::CloudController
           expect(event.actor).to eq(admin_user.guid)
         end
       end
+
+      describe "audit logs" do
+        before { update_hash[:instances] = 2 }
+
+        it "creates an audit log including the request body" do
+          update_app
+
+          audit_event = Event.find(:type => "audit.app.update", :actee => app_obj.guid)
+          expect(audit_event.metadata["request"]).to eq("instances" => 2)
+        end
+
+        context "when the request body has non-whitelisted attributes" do
+          before do
+            update_hash[:foo] = "foo"
+          end
+
+          it "only puts whitelisted attributes from the request body into the audit log" do
+            update_app
+
+            audit_event = Event.find(:type => "audit.app.update", :actee => app_obj.guid)
+            expect(audit_event.metadata["request"]).to eq("instances" => 2)
+          end
+        end
+
+        describe "sensitive app properties" do
+          before do
+            update_hash[:environment_json] = {:password => "my_password"}
+            update_hash[:command] = "DB_PASSWORD=foo ./my-app"
+          end
+
+          it "hides them" do
+            update_app
+
+            audit_event = Event.find(:type => "audit.app.update", :actee => app_obj.guid)
+            expect(audit_event.metadata["request"]).to eq("instances" => 2, "environment_json" => "PRIVATE DATA HIDDEN", "command" => "PRIVATE DATA HIDDEN")
+          end
+        end
+
+        it "creates an audit log even if the app fails to update" do
+          VCAP::CloudController::App.any_instance.stub(:update_from_hash).and_raise("No update for you")
+
+          expect { update_app }.to raise_error("No update for you")
+
+          audit_event = Event.find(:type => "audit.app.update", :actee => app_obj.guid)
+          expect(audit_event.metadata["request"]).to eq("instances" => 2)
+        end
+
+        it "does not create an audit log when the app is not found" do
+          guid = app_obj.guid
+
+          app_obj.delete
+
+          update_app
+
+          expect(Event.find(:type => "audit.app.update", :actee => guid)).to be_nil
+        end
+      end
     end
 
     describe "read an app" do
@@ -424,12 +496,43 @@ module VCAP::CloudController
 
       end
 
-      it "records an app.deleted event" do
-        delete_app
-        last_response.status.should == 204
-        event = Event.find(:type => "audit.app.delete", :actee => app_obj.guid)
-        expect(event).to be
-        expect(event.actor).to eq(admin_user.guid)
+      describe "audit logs" do
+        it "records an app.deleted event" do
+          delete_app
+          last_response.status.should == 204
+          event = Event.find(:type => "audit.app.delete", :actee => app_obj.guid)
+          expect(event).to be
+          expect(event.actor).to eq(admin_user.guid)
+        end
+
+        it "creates an audit log even if the app fails soft_delete" do
+          VCAP::CloudController::App.any_instance.stub(:soft_delete).and_raise("No delete for you")
+
+          expect { delete_app }.to raise_error("No delete for you")
+
+          audit_event = Event.find(:type => "audit.app.delete", :actee => app_obj.guid)
+          expect(audit_event.metadata["request"]).to eq({ "recursive" => false})
+        end
+
+        it "saves the recursive query parameter when recursive"  do
+          delete "/v2/apps/#{app_obj.guid}?recursive=true", {}, json_headers(admin_headers)
+
+          audit_event = Event.find(:type => "audit.app.delete", :actee => app_obj.guid)
+          expect(audit_event.metadata["request"]).to eq({ "recursive" => true })
+        end
+
+        context "app with service bindings" do
+          let!(:svc_instance) { ManagedServiceInstance.make(:space => app_obj.space) }
+          let!(:service_binding) { ServiceBinding.make(:app => app_obj, :service_instance => svc_instance) }
+
+          it "creates an audit log even if non-recursive delete fails with bindings" do
+            VCAP::CloudController::App.any_instance.stub(:soft_delete).and_raise("No delete for you")
+            delete_app
+
+            audit_event = Event.find(:type => "audit.app.delete", :actee => app_obj.guid)
+            expect(audit_event.metadata["request"]).to eq({ "recursive" => false})
+          end
+        end
       end
     end
 
