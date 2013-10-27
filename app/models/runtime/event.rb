@@ -33,6 +33,7 @@ module VCAP::CloudController
     end
 
     def denormalize_space_and_org_guids
+      return if space_guid && organization_guid
       self.space_guid = space.guid
       self.organization_guid = space.organization.guid
     end
@@ -103,6 +104,52 @@ module VCAP::CloudController
         metadata: {
           request: { recursive: recursive }
         }
+      )
+    end
+
+    def self.record_space_create(space, actor, request_attrs)
+      create(
+          space: space,
+          type: "audit.space.create",
+          actee: space.guid,
+          actee_type: "space",
+          actor: actor.guid,
+          actor_type: "user",
+          timestamp: Time.now,
+          metadata: {
+              request: request_attrs
+          }
+      )
+    end
+
+    def self.record_space_update(space, actor, request_attrs)
+      create(
+          space: space,
+          type: "audit.space.update",
+          actee: space.guid,
+          actee_type: "space",
+          actor: actor.guid,
+          actor_type: "user",
+          timestamp: Time.now,
+          metadata: {
+              request: request_attrs
+          }
+      )
+    end
+
+    def self.record_space_delete(space, actor, recursive)
+      create(
+          type: "audit.space.delete",
+          actee: space.guid,
+          actee_type: "space",
+          actor: actor.guid,
+          actor_type: "user",
+          timestamp: Time.now,
+          space_guid: space.guid,
+          organization_guid: space.organization.guid,
+          metadata: {
+              request: { recursive: recursive }
+          }
       )
     end
   end
