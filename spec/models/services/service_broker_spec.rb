@@ -156,6 +156,27 @@ module VCAP::CloudController
         end
       end
 
+      context 'when the service has no plans' do
+        let(:catalog) do
+          {
+            'services' => [
+              {
+                'id' => service_id,
+                'name' => service_name,
+                'description' => service_description,
+                'bindable' => true,
+                'tags' => ['mysql', 'relational'],
+                'plans' => []
+              }
+            ]
+          }
+        end
+
+        it 'should throw an exception' do
+          expect { broker.load_catalog }.to raise_error(Errors::ServiceBrokerInvalid, /each service must have at least one plan/)
+          expect(broker.errors.on(:services)).to eq(['each service must have at least one plan'])
+        end
+      end
 
       it 'creates plans from the catalog' do
         expect {
@@ -229,30 +250,6 @@ module VCAP::CloudController
           expect(plan.free).to be_true
         end
 
-        context 'and the catalog has no plans' do
-          let(:catalog) do
-            {
-              'services' => [
-                {
-                  'id' => service_id,
-                  'name' => service_name,
-                  'description' => service_description,
-                  'bindable' => true,
-                  'tags' => ['mysql', 'relational'],
-                  'plans' => []
-                }
-              ]
-            }
-          end
-
-          it 'marks the service as inactive' do
-            expect(service.active?).to be_true
-            broker.load_catalog
-            service.reload
-            expect(service.active?).to be_false
-          end
-        end
-
         context 'and a plan already exists' do
           let!(:plan) do
             ServicePlan.make(
@@ -291,15 +288,51 @@ module VCAP::CloudController
           context 'when an instance for the plan exists' do
             it 'marks the existing plan as inactive' do
               ManagedServiceInstance.make(service_plan: plan)
-              expect(plan.active?).to be_true
+              expect(plan).to be_active
 
               broker.load_catalog
               plan.reload
 
-              expect(plan.active?).to be_false
+              expect(plan).not_to be_active
             end
           end
         end
+      end
+
+      context 'when a service no longer exists' do
+        let!(:service) do
+          Service.make(
+            service_broker: broker,
+            unique_id: 'nolongerexists'
+          )
+        end
+
+        it 'should delete the service' do
+          broker.load_catalog
+          expect(Service.find(:id => service.id)).to be_nil
+        end
+
+        context 'but it has an active plan' do
+          let!(:plan) do
+            ServicePlan.make(
+              service: service,
+              unique_id: 'also_no_longer_in_catalog'
+            )
+          end
+          let!(:service_instance) do
+            ManagedServiceInstance.make(service_plan: plan)
+          end
+
+          it 'marks the existing service as inactive' do
+            expect(service).to be_active
+
+            broker.load_catalog
+            service.reload
+
+            expect(service).not_to be_active
+          end
+        end
+
       end
     end
 
