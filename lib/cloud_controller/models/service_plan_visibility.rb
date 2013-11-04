@@ -13,13 +13,9 @@ module VCAP::CloudController::Models
     end
 
     def self.visible_private_plan_ids_for_user(user)
-      user.organizations.map {|org| 
-        visible_private_plan_ids_for_organization(org)
-      }.flatten.uniq
-    end
-
-    def self.visible_private_plan_ids_for_organization(organization)
-      organization.service_plan_visibilities.map { |visibility| visibility.service_plan_id }
+      self.dataset.join(:organizations_users, :organization_id => :organization_id).
+        where(user_id: user.id).
+        map(:service_plan_id).uniq
     end
 
     def self.user_visibility_filter(user)

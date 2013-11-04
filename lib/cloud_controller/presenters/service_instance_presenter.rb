@@ -18,7 +18,7 @@ class ServiceInstancePresenter
 
     def to_hash
       {
-        label: "user-provided",
+        label: "Unmanaged Service #{@service_instance.guid}",
         name: @service_instance.name
       }
     end

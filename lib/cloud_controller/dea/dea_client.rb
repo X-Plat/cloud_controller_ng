@@ -220,7 +220,6 @@ module VCAP::CloudController
       # @param [Enumerable, #each] indices an Enumerable of indices / indexes
       def start_instances_with_message(app, indices, message_override = {})
         msg = start_app_message(app)
-
         indices.each do |idx|
           msg[:index] = idx
           dea_id = dea_pool.find_dea(app.memory, app.stack.name, app.guid)
@@ -257,7 +256,7 @@ module VCAP::CloudController
       end
 
       def app_bns_node(app)
-        "#{app.space.organization.name}-#{app.space.name}-#{app.name}"
+        "#{app.space.organization.name}-#{app.space.name}-#{app.name}"  
       end
 
       def start_app_message(app)

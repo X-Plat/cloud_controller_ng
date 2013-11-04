@@ -1,5 +1,5 @@
 module VCAP::CloudController::Models
-  class UserProvidedServiceInstance < ServiceInstance
+  class ProvidedServiceInstance < ServiceInstance
     export_attributes :name, :credentials, :space_guid
     import_attributes :name, :credentials, :space_guid
 
@@ -23,10 +23,6 @@ module VCAP::CloudController::Models
 
     def bind_on_gateway(new_service_binding)
       new_service_binding.credentials = self.credentials
-    end
-
-    def bindable?
-      true
     end
   end
 end

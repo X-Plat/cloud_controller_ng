@@ -26,18 +26,12 @@ module VCAP::CloudController::Models
     end
 
     def validate
+      self.unique_id = [service.unique_id, name].join("_") if !unique_id && service
       validates_presence :name
       validates_presence :description
       validates_presence :free
       validates_presence :service
       validates_unique   [:service_id, :name]
-    end
-
-    def self.organization_visible(organization)
-      dataset.filter(Sequel.|(
-        {public: true},
-        {id: ServicePlanVisibility.visible_private_plan_ids_for_organization(organization)}
-      ))
     end
 
     def self.user_visibility_filter(user)
@@ -51,10 +45,6 @@ module VCAP::CloudController::Models
 
     def trial_db?
       unique_id == self.class.trial_db_guid
-    end
-
-    def bindable?
-      service.bindable?
     end
   end
 end

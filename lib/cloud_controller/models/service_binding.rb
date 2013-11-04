@@ -37,7 +37,6 @@ module VCAP::CloudController::Models
 
     def before_create
       super
-      raise VCAP::Errors::UnbindableService unless service_instance.bindable?
       service_instance.bind_on_gateway(self) if service_instance
     end
 
