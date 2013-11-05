@@ -11,6 +11,4 @@ ci-working-dir
 *.rbc
 *.swp
 *.pid
-vendor
-!vendor/errors
 .DS_Store
