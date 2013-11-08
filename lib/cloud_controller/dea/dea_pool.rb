@@ -38,13 +38,13 @@ module VCAP::CloudController
       end
     end
 
-    def find_dea(mem, stack, app_id)
+    def find_dea(mem, stack, app_id, space_id)
       mutex.synchronize do
         prune_stale_deas
 
         best_dea_ad = EligibleDeaAdvertisementFilter.new(@dea_advertisements).
                        only_meets_needs(mem, stack).
-                       only_fewest_instances_of_app(app_id).
+                       choose_single_instance_candidates(app_id, space_id).
                        upper_half_by_memory.
                        sample
 
@@ -56,7 +56,7 @@ module VCAP::CloudController
       dea_id = opts[:dea_id]
       app_id = opts[:app_id]
 
-      @dea_advertisements.find { |ad| ad.dea_id == dea_id }.increment_instance_count(app_id)
+      @dea_advertisements.find { |ad| ad.dea_id == dea_id }.increment_instance_count(app_id) unless opts[:no_staging]
     end
 
     private
@@ -89,6 +89,30 @@ module VCAP::CloudController
 
       def num_instances_of(app_id)
         stats[:app_id_to_count].fetch(app_id.to_sym, 0)
+      end
+ 
+      def total_instances_by_app_id
+        total = 0
+        stats[:app_id_to_count].each_pair { |_, count|
+          total += count
+        }     
+        total
+      end
+
+      def total_instances_by_space_id
+        total = 0
+        stats[:space_id_to_count].each_pair { |_, count|
+          total += count
+        }  
+        total        
+      end
+      
+      def has_space?(space_id)
+        stats[:space_id_to_count].has_key?(space_id.to_sym)
+      end
+
+      def total_spaces
+        stats[:space_id_to_count].keys.size
       end
 
       def available_memory
@@ -130,6 +154,10 @@ module VCAP::CloudController
         fewest_instances_of_app = @dea_advertisements.map { |ad| ad.num_instances_of(app_id) }.min
         @dea_advertisements.select! { |ad| ad.num_instances_of(app_id) == fewest_instances_of_app }
         self
+      end
+
+      def choose_single_instance_candidates(app_id, space_id)
+        @dea_advertisements.select! { |ad| (ad.total_instances_by_app_id == 0) || (ad.has_space?(space_id) && ad.total_spaces == 1 && ad.num_instances_of(app_id) == 0 ) }
       end
 
       def upper_half_by_memory

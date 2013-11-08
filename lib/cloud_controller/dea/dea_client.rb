@@ -222,7 +222,7 @@ module VCAP::CloudController
         msg = start_app_message(app)
         indices.each do |idx|
           msg[:index] = idx
-          dea_id = dea_pool.find_dea(app.memory, app.stack.name, app.guid)
+          dea_id = dea_pool.find_dea(app.memory, app.stack.name, app.guid, app.space_guid)
           if dea_id
             dea_publish_start(dea_id, msg.merge(message_override))
             dea_pool.mark_app_started(dea_id: dea_id, app_id: app.guid)
