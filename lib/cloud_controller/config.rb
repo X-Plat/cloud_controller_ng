@@ -128,7 +128,7 @@ class VCAP::CloudController::Config < VCAP::Config
       },
 
       :db_encryption_key => String,
-
+      optional(:exclusive_deploy) => bool,
       optional(:trial_db) => {
         :guid => String,
       },
@@ -150,8 +150,7 @@ class VCAP::CloudController::Config < VCAP::Config
     stager_pool = VCAP::CloudController::StagerPool.new(config, message_bus)
     VCAP::CloudController::AppManager.configure(config, message_bus, stager_pool)
     VCAP::CloudController::Staging.configure(config)
-
-    dea_pool = VCAP::CloudController::DeaPool.new(message_bus)
+    dea_pool = VCAP::CloudController::DeaPool.new(message_bus, config[:exclusive_deploy])
     VCAP::CloudController::DeaClient.configure(config, message_bus, dea_pool)
 
     VCAP::CloudController::LegacyBulk.configure(config, message_bus)

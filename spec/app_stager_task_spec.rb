@@ -296,7 +296,7 @@ module VCAP::CloudController
             end
 
             it "marks app started in dea pool" do
-              DeaClient.dea_pool.should_receive(:mark_app_started).with( {:dea_id => stager_id, :app_id => app.guid } )
+              DeaClient.dea_pool.should_receive(:mark_app_started).with( {:dea_id => stager_id, :app_id => app.guid, :no_staging => true } )
               stage
             end
 
@@ -308,7 +308,7 @@ module VCAP::CloudController
             it "calls provided callback" do
               callback_options = nil
               stage { |options| callback_options = options }
-              callback_options[:started_instances].should equal(1)
+              callback_options[:started_instances].should equal(0)
             end
           end
 
