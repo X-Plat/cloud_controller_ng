@@ -87,8 +87,7 @@ module VCAP::CloudController
         :download_uri => Staging.app_uri(@app),
         :upload_uri => Staging.droplet_upload_uri(@app),
         :buildpack_cache_download_uri => Staging.buildpack_cache_download_uri(@app),
-        :buildpack_cache_upload_uri => Staging.buildpack_cache_upload_uri(@app),
-        :start_message => start_app_message
+        :buildpack_cache_upload_uri => Staging.buildpack_cache_upload_uri(@app)
       }
     end
 
