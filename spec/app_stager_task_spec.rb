@@ -520,25 +520,6 @@ module VCAP::CloudController
         end
       end
 
-      it "includes start app message" do
-        request = staging_task.staging_request
-        request[:start_message].should include dea_start_message
-      end
-
-      it "includes app index 0" do
-        request = staging_task.staging_request
-        request[:start_message].should include ({:index => 0})
-      end
-
-      it "overwrites droplet sha" do
-        request = staging_task.staging_request
-        request[:start_message].should include ({:sha1 => nil})
-      end
-
-      it "overwrites droplet download uri" do
-        request = staging_task.staging_request
-        request[:start_message].should include ({:executableUri => nil})
-      end
     end
   end
 end
