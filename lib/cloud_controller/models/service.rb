@@ -10,24 +10,28 @@ module VCAP::CloudController::Models
     default_order_by  :label
 
     export_attributes :label, :provider, :url, :description,
-                      :version, :info_url, :active, :unique_id, :extra
+                      :version, :info_url, :active, :bindable,
+                      :unique_id, :extra
 
     import_attributes :label, :provider, :url, :description,
-                      :version, :info_url, :active, :unique_id, :extra
+                      :version, :info_url, :active, :bindable,
+                      :unique_id, :extra
 
     strip_attributes  :label, :provider
 
     def validate
-      self.unique_id ||= "#{provider}_#{label}"
       validates_presence :label
       validates_presence :provider
       validates_presence :url
       validates_presence :description
       validates_presence :version
+      validates_presence :bindable
       validates_url      :url
       validates_url      :info_url
       validates_unique   [:label, :provider]
     end
+
+    alias_method :bindable?, :bindable
 
     def self.user_visibility_filter(current_user)
       plans_I_can_see = ServicePlan.filter(ServicePlan.user_visibility_filter(current_user))

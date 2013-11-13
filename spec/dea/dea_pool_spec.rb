@@ -27,7 +27,7 @@ module VCAP::CloudController
       it "finds advertised dea" do
         subject.register_subscriptions
         message_bus.publish("dea.advertise", dea_advertise_msg)
-        subject.find_dea(1, "stack", "app-id").should == "dea-id"
+        subject.find_dea({:memory => 1, :stack => "stack", :app_guid => "app-id"}).should == "dea-id"
       end
 
       it "clears advertisements of DEAs being shut down" do
@@ -39,7 +39,7 @@ module VCAP::CloudController
           end
         end
 
-        subject.find_dea(1, "stack", "app-id").should be_nil
+        subject.find_dea({:memory => 1, :stack => "stack", :app_guid => "app-id"}).should be_nil
       end
     end
 
@@ -58,7 +58,7 @@ module VCAP::CloudController
         it "only finds registered deas" do
           expect {
             subject.process_advertise_message(dea_advertise_msg)
-          }.to change { subject.find_dea(1, "stack", "app-id") }.from(nil).to("dea-id")
+          }.to change { subject.find_dea({:memory => 1, :stack => "stack", :app_guid => "app-id"}) }.from(nil).to("dea-id")
         end
       end
 
@@ -68,10 +68,10 @@ module VCAP::CloudController
             subject.process_advertise_message(dea_advertise_msg)
 
             Timecop.travel(10)
-            subject.find_dea(1024, "stack", "app-id").should == "dea-id"
+            subject.find_dea({:memory => 1024, :stack => "stack", :app_guid => "app-id"}).should == "dea-id"
 
             Timecop.travel(1)
-            subject.find_dea(1024, "stack", "app-id").should be_nil
+            subject.find_dea({:memory => 1024, :stack => "stack", :app_guid => "app-id"}).should be_nil
           end
         end
       end
@@ -79,16 +79,16 @@ module VCAP::CloudController
       describe "memory capacity" do
         it "only finds deas that can satisfy memory request" do
           subject.process_advertise_message(dea_advertise_msg)
-          subject.find_dea(1025, "stack", "app-id").should be_nil
-          subject.find_dea(1024, "stack", "app-id").should == "dea-id"
+          subject.find_dea({:memory => 1025, :stack => "stack", :app_guid => "app-id"}).should be_nil
+          subject.find_dea({:memory => 1024, :stack => "stack", :app_guid => "app-id"}).should == "dea-id"
         end
       end
 
       describe "stacks availability" do
         it "only finds deas that can satisfy stack request" do
           subject.process_advertise_message(dea_advertise_msg)
-          subject.find_dea(0, "unknown-stack", "app-id").should be_nil
-          subject.find_dea(0, "stack", "app-id").should == "dea-id"
+          subject.find_dea({:memory => 0, :stack => "unknown-stack", :app_guid => "app-id"} ).should be_nil
+          subject.find_dea({:memory => 0, :stack => "stack", :app_guid => "app-id"} ).should == "dea-id"
         end
       end
 
@@ -104,8 +104,8 @@ module VCAP::CloudController
         end
 
         it "picks DEAs that have no existing instances of the app" do
-          subject.find_dea(1, "stack", "app-id").should == "dea-id"
-          subject.find_dea(1, "stack", "other-app-id").should == "other-dea-id"
+          subject.find_dea({:memory => 1, :stack => "stack", :app_guid => "app-id"}).should == "dea-id"
+          subject.find_dea({:memory => 1, :stack => "stack", :app_guid => "other-app-id"}).should == "other-dea-id"
         end
       end
 
@@ -128,7 +128,7 @@ module VCAP::CloudController
           it "randomly picks one of the eligible DEAs" do
             found_dea_ids = []
             20.times do
-              found_dea_ids << subject.find_dea(1, "stack", "app-id")
+              found_dea_ids << subject.find_dea({:memory => 1, :stack => "stack", :app_guid => "app-id"})
             end
 
             found_dea_ids.uniq.should =~ %w(dea-id1 dea-id2)
@@ -149,7 +149,7 @@ module VCAP::CloudController
             it "always picks the one with the greater memory" do
               found_dea_ids = []
               20.times do
-                found_dea_ids << subject.find_dea(1, "stack", "app-id")
+                found_dea_ids << subject.find_dea({:memory => 1, :stack => "stack", :app_guid => "app-id"})
               end
 
               found_dea_ids.uniq.should =~ %w(dea-id1)
@@ -172,7 +172,7 @@ module VCAP::CloudController
             it "always picks from the half of the list (rounding up) with greater memory" do
               found_dea_ids = []
               40.times do
-                found_dea_ids << subject.find_dea(1, "stack", "app-id")
+                found_dea_ids << subject.find_dea({:memory => 1, :stack => "stack", :app_guid => "app-id"})
               end
 
               found_dea_ids.uniq.should =~ %w(dea-id1 dea-id2 dea-id3)
@@ -201,7 +201,7 @@ module VCAP::CloudController
         it "will use different DEAs when starting an app with multiple instances" do
           dea_ids = []
           10.times do
-            dea_id = subject.find_dea(0, "stack", "app-id")
+            dea_id = subject.find_dea({:memory => 0, :stack => "stack", :app_guid => "app-id"})
             dea_ids << dea_id
             subject.mark_app_started(dea_id: dea_id, app_id: "app-id")
           end
@@ -222,7 +222,7 @@ module VCAP::CloudController
             next_advertisement[:available_memory] = 0
             subject.process_advertise_message(next_advertisement)
 
-            subject.find_dea(64, "stack", "foo").should be_nil
+            subject.find_dea({:memory => 64, :stack => "stack", :app_guid => "foo"}).should be_nil
           end
         end
       end

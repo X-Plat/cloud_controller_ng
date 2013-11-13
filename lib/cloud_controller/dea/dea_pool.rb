@@ -6,9 +6,10 @@ module VCAP::CloudController
   class DeaPool
     ADVERTISEMENT_EXPIRATION = 10
 
-    def initialize(message_bus)
+    def initialize(message_bus, exclusive = nil)
       @message_bus = message_bus
       @dea_advertisements = []
+      @exclusive = exclusive ||=  false
     end
 
     def register_subscriptions
@@ -24,9 +25,12 @@ module VCAP::CloudController
     def process_advertise_message(message)
       mutex.synchronize do
         advertisement = DeaAdvertisement.new(message)
-
         remove_advertisement_for_id(advertisement.dea_id)
         @dea_advertisements << advertisement
+        if @exclusive && advertisement.is_hybrid? 
+           logger.warn "Hybrid dea node #{advertisement.dea_id} found. You could \
+                        disable the exclusive_deploy configure to eliminate this warning. "
+        end
       end
     end
 
@@ -38,13 +42,15 @@ module VCAP::CloudController
       end
     end
 
-    def find_dea(mem, stack, app_id)
+    def find_dea(dea_requirements)
+      mem = dea_requirements[:memory]
+      stack = dea_requirements[:stack]
       mutex.synchronize do
         prune_stale_deas
 
         best_dea_ad = EligibleDeaAdvertisementFilter.new(@dea_advertisements).
                        only_meets_needs(mem, stack).
-                       only_fewest_instances_of_app(app_id).
+                       hybrid_deploy_candidates(dea_requirements).
                        upper_half_by_memory.
                        sample
 
@@ -56,7 +62,11 @@ module VCAP::CloudController
       dea_id = opts[:dea_id]
       app_id = opts[:app_id]
 
-      @dea_advertisements.find { |ad| ad.dea_id == dea_id }.increment_instance_count(app_id)
+      @dea_advertisements.find { |ad| ad.dea_id == dea_id }.increment_instance_count(app_id) unless opts[:no_staging]
+    end
+
+    def logger
+       @logger ||= Steno.logger("cc.dea.pool")
     end
 
     private
@@ -89,6 +99,39 @@ module VCAP::CloudController
 
       def num_instances_of(app_id)
         stats[:app_id_to_count].fetch(app_id.to_sym, 0)
+      end
+ 
+      def total_instances_by_app_id
+        total = 0
+        stats[:app_id_to_count].each_pair { |_, count|
+          total += count
+        }     
+        total
+      end
+
+      def total_instances_by_space_id
+        total = 0
+        stats[:space_id_to_count].each_pair { |_, count|
+          total += count
+        }  
+        total        
+      end
+
+      def instance_hybrid?
+        stats[:app_id_to_count].select { | _, count | count > 1 }.size > 0
+      end
+
+      def has_space?(space_id)
+        stats[:space_id_to_count].has_key?(space_id.to_sym)
+      end
+
+      def is_hybrid?
+        ret = total_spaces > 1 || instance_hybrid?
+        return ret
+      end
+
+      def total_spaces
+        stats[:space_id_to_count].keys.size
       end
 
       def available_memory
@@ -126,10 +169,32 @@ module VCAP::CloudController
         self
       end
 
-      def only_fewest_instances_of_app(app_id)
+      def only_fewest_instances_of_app(requirements)
+        app_id = requirements[:app_guid]
         fewest_instances_of_app = @dea_advertisements.map { |ad| ad.num_instances_of(app_id) }.min
         @dea_advertisements.select! { |ad| ad.num_instances_of(app_id) == fewest_instances_of_app }
         self
+      end
+
+      def exclusive_dea_candidates(requirements)
+        app_id = requirements[:app_guid]
+        space_id = requirements[:space_guid]
+        
+        @dea_advertisements.select! { |ad| (ad.total_instances_by_app_id == 0) || 
+                                           (ad.has_space?(space_id) && 
+                                            ad.total_spaces == 1 && 
+                                            ad.num_instances_of(app_id) == 0 
+                                           ) 
+                                    }
+        self
+      end
+
+      def hybrid_deploy_candidates(requirements)
+          if requirements[:space_guid]
+             exclusive_dea_candidates(requirements)
+          else
+             only_fewest_instances_of_app(requirements)
+          end
       end
 
       def upper_half_by_memory

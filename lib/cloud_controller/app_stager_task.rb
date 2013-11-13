@@ -87,8 +87,7 @@ module VCAP::CloudController
         :download_uri => Staging.app_uri(@app),
         :upload_uri => Staging.droplet_upload_uri(@app),
         :buildpack_cache_download_uri => Staging.buildpack_cache_download_uri(@app),
-        :buildpack_cache_upload_uri => Staging.buildpack_cache_upload_uri(@app),
-        :start_message => start_app_message
+        :buildpack_cache_upload_uri => Staging.buildpack_cache_upload_uri(@app)
       }
     end
 
@@ -180,13 +179,13 @@ module VCAP::CloudController
 
       @app.save
 
-      DeaClient.dea_pool.mark_app_started(:dea_id => @stager_id, :app_id => @app.guid)
+      DeaClient.dea_pool.mark_app_started(:dea_id => @stager_id, :app_id => @app.guid, :no_staging => true)
     ensure
       destroy_upload_handle
     end
 
     def trigger_completion_callback
-      @completion_callback.call(:started_instances => 1) if @completion_callback
+      @completion_callback.call(:started_instances => 0) if @completion_callback
     end
 
     def destroy_upload_handle
