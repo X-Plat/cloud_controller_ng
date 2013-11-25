@@ -271,7 +271,11 @@ module VCAP::CloudController
         {
           :application_db_id => app.id,
           :droplet => app.guid,
-          :tags => {:space => app.space_guid, :bns_node =>app_bns_node(app) },
+          :tags => {
+            :space => app.space_guid, 
+            :bns_node => app_bns_node(app) ,
+            :org_name => app.space.organization.name
+          },
           :name => app.name,
           :uris => app.uris,
           :prod => app.production,
