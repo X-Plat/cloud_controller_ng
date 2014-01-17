@@ -62,6 +62,7 @@ module VCAP::CloudController
       dea_id = opts[:dea_id]
       app_id = opts[:app_id]
       space_id = opts[:space_id]
+
       @dea_advertisements.find { |ad| ad.dea_id == dea_id }.increment_instance_count(app_id, space_id) unless opts[:no_staging]
     end
 
@@ -93,9 +94,9 @@ module VCAP::CloudController
         @updated_at = Time.now
       end
 
-      def increment_instance_count(app_id)
+      def increment_instance_count(app_id, space_id = nil)
         stats[:app_id_to_count][app_id.to_sym] = num_instances_of(app_id.to_sym) + 1
-        stats[:space_id_to_count][space_id.to_sym] = num_instances_of_space(space_id.to_sym) + 1
+        stats[:space_id_to_count][space_id.to_sym] = num_instances_of_space(space_id.to_sym) + 1 unless space_id
       end
 
       def num_instances_of(app_id)
