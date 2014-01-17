@@ -179,7 +179,7 @@ module VCAP::CloudController
 
       @app.save
 
-      DeaClient.dea_pool.mark_app_started(:dea_id => @stager_id, :app_id => @app.guid, :no_staging => true)
+      DeaClient.dea_pool.mark_app_started(:dea_id => @stager_id, :app_id => @app.guid, :space_id => @app.space_guid, :no_staging => true)
     ensure
       destroy_upload_handle
     end
