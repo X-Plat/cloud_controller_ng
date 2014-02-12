@@ -96,14 +96,14 @@ module VCAP::CloudController
 
       def increment_instance_count(app_id, space_id = nil)
         stats[:app_id_to_count][app_id.to_sym] = num_instances_of(app_id.to_sym) + 1
-        stats[:space_id_to_count][space_id.to_sym] = num_instances_of_space(space_id.to_sym) + 1 unless space_id
+        stats[:space_id_to_count][space_id.to_sym] = num_instances_of_space(space_id.to_sym) + 1 if space_id
       end
 
       def num_instances_of(app_id)
         stats[:app_id_to_count].fetch(app_id.to_sym, 0)
       end
 
-      def num_instance_of_space(space_id)
+      def num_instances_of_space(space_id)
         stats[:space_id_to_count].fetch(space_id.to_sym, 0)
       end 
 
