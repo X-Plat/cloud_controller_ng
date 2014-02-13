@@ -274,7 +274,8 @@ module VCAP::CloudController
           :tags => {
             :space => app.space_guid, 
             :bns_node => app_bns_node(app) ,
-            :org_name => app.space.organization.name
+            :org_name => app.space.organization.name,
+            :space_name => app.space.name
           },
           :name => app.name,
           :uris => app.uris,
