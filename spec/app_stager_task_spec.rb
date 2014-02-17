@@ -296,7 +296,7 @@ module VCAP::CloudController
             end
 
             it "marks app started in dea pool" do
-              DeaClient.dea_pool.should_receive(:mark_app_started).with( {:dea_id => stager_id, :app_id => app.guid, :no_staging => true } )
+              DeaClient.dea_pool.should_receive(:mark_app_started).with( {:dea_id => stager_id, :app_id => app.guid, :space_id => app.space_guid, :no_staging => true } )
               stage
             end
 

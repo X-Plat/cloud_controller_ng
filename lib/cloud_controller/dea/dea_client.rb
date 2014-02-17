@@ -232,7 +232,7 @@ module VCAP::CloudController
 
           if dea_id
             dea_publish_start(dea_id, msg.merge(message_override))
-            dea_pool.mark_app_started(dea_id: dea_id, app_id: app.guid)
+            dea_pool.mark_app_started(dea_id: dea_id, app_id: app.guid, space_id: app.space_guid)
           else
             logger.error "no resources available #{msg}"
           end
@@ -274,7 +274,8 @@ module VCAP::CloudController
           :tags => {
             :space => app.space_guid, 
             :bns_node => app_bns_node(app) ,
-            :org_name => app.space.organization.name
+            :org_name => app.space.organization.name,
+            :space_name => app.space.name
           },
           :name => app.name,
           :uris => app.uris,

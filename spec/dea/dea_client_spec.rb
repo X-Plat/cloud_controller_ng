@@ -37,7 +37,7 @@ module VCAP::CloudController
         res = DeaClient.send(:start_app_message, @app)
         res.should be_kind_of(Hash)
         res[:droplet].should == @app.guid
-        res[:tags].should == {space: @app.space_guid, bns_node: "#{@app.space.organization.name}-#{@app.space.name}-#{@app.name}", org_name: @app.space.organization.name}
+        res[:tags].should == {space: @app.space_guid, bns_node: "#{@app.space.organization.name}-#{@app.space.name}-#{@app.name}", org_name: @app.space.organization.name, space_name: @app.space.name}
         res[:services].should be_kind_of(Array)
         res[:services].count.should == NUM_SVC_INSTANCES
         res[:services].first.should be_kind_of(Hash)
@@ -88,7 +88,7 @@ module VCAP::CloudController
         @app.instances = 2
 
         @dea_pool.should_receive(:find_dea).and_return("dea_123")
-        @dea_pool.should_receive(:mark_app_started).with(dea_id: "dea_123", app_id: @app.guid)
+        @dea_pool.should_receive(:mark_app_started).with(dea_id: "dea_123", app_id: @app.guid, space_id: @app.space_guid)
         @message_bus.should_receive(:publish).with(
           "dea.dea_123.start",
           hash_including(
@@ -108,8 +108,8 @@ module VCAP::CloudController
         @app.instances = 2
         @dea_pool.should_receive(:find_dea).and_return("abc")
         @dea_pool.should_receive(:find_dea).and_return("def")
-        @dea_pool.should_receive(:mark_app_started).with(dea_id: "abc", app_id: @app.guid)
-        @dea_pool.should_receive(:mark_app_started).with(dea_id: "def", app_id: @app.guid)
+        @dea_pool.should_receive(:mark_app_started).with(dea_id: "abc", app_id: @app.guid, space_id: @app.space_guid)
+        @dea_pool.should_receive(:mark_app_started).with(dea_id: "def", app_id: @app.guid, space_id: @app.space_guid)
         @message_bus.should_receive(:publish).with("dea.abc.start", kind_of(Hash))
         @message_bus.should_receive(:publish).with("dea.def.start", kind_of(Hash))
         with_em_and_thread do
@@ -121,7 +121,7 @@ module VCAP::CloudController
         @app.instances = 2
         @dea_pool.stub(:find_dea).and_return("abc", "def")
 
-        @dea_pool.should_receive(:mark_app_started).with(dea_id: "abc", app_id: @app.guid)
+        @dea_pool.should_receive(:mark_app_started).with(dea_id: "abc", app_id: @app.guid, space_id: @app.space_guid)
         @dea_pool.should_not_receive(:mark_app_started).with(dea_id: "def", app_id: @app.guid)
 
         with_em_and_thread do
@@ -135,7 +135,7 @@ module VCAP::CloudController
 
         @app.instances = 1
         @dea_pool.should_receive(:find_dea).and_return("abc")
-        @dea_pool.should_receive(:mark_app_started).with(dea_id: "abc", app_id: @app.guid)
+        @dea_pool.should_receive(:mark_app_started).with(dea_id: "abc", app_id: @app.guid, space_id: @app.space_guid)
         @message_bus.should_receive(:publish).with("dea.abc.start", hash_including(:cc_partition => "ngFTW"))
 
         with_em_and_thread do
@@ -951,9 +951,9 @@ module VCAP::CloudController
           @dea_pool.should_receive(:find_dea).and_return("abc")
           @dea_pool.should_receive(:find_dea).and_return("def")
           @dea_pool.should_receive(:find_dea).and_return("efg")
-          @dea_pool.should_receive(:mark_app_started).with(dea_id: "abc", app_id: @app.guid)
-          @dea_pool.should_receive(:mark_app_started).with(dea_id: "def", app_id: @app.guid)
-          @dea_pool.should_receive(:mark_app_started).with(dea_id: "efg", app_id: @app.guid)
+          @dea_pool.should_receive(:mark_app_started).with(dea_id: "abc", app_id: @app.guid, space_id: @app.space_guid)
+          @dea_pool.should_receive(:mark_app_started).with(dea_id: "def", app_id: @app.guid, space_id: @app.space_guid)
+          @dea_pool.should_receive(:mark_app_started).with(dea_id: "efg", app_id: @app.guid, space_id: @app.space_guid)
           @message_bus.should_receive(:publish).with("dea.abc.start", kind_of(Hash))
           @message_bus.should_receive(:publish).with("dea.def.start", kind_of(Hash))
           @message_bus.should_receive(:publish).with("dea.efg.start", kind_of(Hash))

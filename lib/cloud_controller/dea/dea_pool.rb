@@ -61,8 +61,9 @@ module VCAP::CloudController
     def mark_app_started(opts)
       dea_id = opts[:dea_id]
       app_id = opts[:app_id]
+      space_id = opts[:space_id]
 
-      @dea_advertisements.find { |ad| ad.dea_id == dea_id }.increment_instance_count(app_id) unless opts[:no_staging]
+      @dea_advertisements.find { |ad| ad.dea_id == dea_id }.increment_instance_count(app_id, space_id) unless opts[:no_staging]
     end
 
     def logger
@@ -93,14 +94,19 @@ module VCAP::CloudController
         @updated_at = Time.now
       end
 
-      def increment_instance_count(app_id)
+      def increment_instance_count(app_id, space_id = nil)
         stats[:app_id_to_count][app_id.to_sym] = num_instances_of(app_id.to_sym) + 1
+        stats[:space_id_to_count][space_id.to_sym] = num_instances_of_space(space_id.to_sym) + 1 if space_id
       end
 
       def num_instances_of(app_id)
         stats[:app_id_to_count].fetch(app_id.to_sym, 0)
       end
- 
+
+      def num_instances_of_space(space_id)
+        stats[:space_id_to_count].fetch(space_id.to_sym, 0)
+      end 
+
       def total_instances_by_app_id
         total = 0
         stats[:app_id_to_count].each_pair { |_, count|
