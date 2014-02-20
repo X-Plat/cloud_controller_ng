@@ -87,6 +87,9 @@ packages:
 
 droplets:
   droplet_directory_key: cc-droplets
+  unzipdroplet_directory_key: cc-unzipdroplets
+  seed_dir: ginko3_seed
+  use_p2p: true
   fog_connection:
     provider: Local
     local_root: /tmp

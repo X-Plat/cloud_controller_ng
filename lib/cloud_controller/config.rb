@@ -119,6 +119,9 @@ class VCAP::CloudController::Config < VCAP::Config
       :droplets => {
         optional(:max_droplet_size) => Integer,
         optional(:droplet_directory_key) => String,
+        optional(:unzipdroplet_directory_key) => String,
+        optional(:seed_dir) => String,
+        optional(:use_p2p) => bool,
         :fog_connection => {
           :provider => String,
           optional(:aws_access_key_id) => String,

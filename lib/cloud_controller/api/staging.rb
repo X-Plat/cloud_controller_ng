@@ -92,6 +92,47 @@ module VCAP::CloudController
         store_package(app, path, :droplet)
       end
 
+      def store_unzip_droplet(app)
+        begin
+            droplet_gzip_file=File.join(@config[:droplets][:fog_connection][:local_root],@config[:droplets][:droplet_directory_key],key_from_app(app, :droplet))
+            unless File.exist?(droplet_gzip_file)
+                raise Errno::ENOENT, "#{droplet_gzip_file} doesn't exist"
+            end
+            FileUtils.mkdir_p(unzip_dir(app))
+            system("tar zxf #{droplet_gzip_file} -C #{unzip_dir(app)}")
+            unless $?.success?
+                raise SystemCallError, "Failed to tar zxf #{droplet_gzip_file} -C #{unzip_dir(app)}"
+            end
+        rescue => e
+            logger.warn("Error: Failed to store unzip droplet: #{e}")
+        end
+      end
+       
+      def unzip_dir(app)
+        File.join(@config[:droplets][:fog_connection][:local_root],@config[:droplets][:unzipdroplet_directory_key],key_from_app(app,:other),"#{app.space.organization.name}_#{app.space.name}_#{app.name.split('_')[0]}")
+      end
+
+      def start_to_serve(app) 
+        begin
+            unless File.exist?(unzip_dir(app))
+                raise Errno::ENOENT, "#{unzip_dir(app)} doesn't exist"
+            end
+            torrent_dir=File.join(@config[:droplets][:fog_connection][:local_root],@config[:droplets][:seed_dir])
+            FileUtils.mkdir_p(torrent_dir) unless Dir.exist?(torrent_dir)
+            torrent_file=File.join(torrent_dir,"#{app.guid}.torrent")
+            #start to serve 
+            result=`gko3 serve -p #{unzip_dir(app)} -r #{torrent_file} -S -1 --besthash`
+            if $?.success?
+                infohash=result.split("\n")[3].split(":")[1]
+                app.infohash=infohash
+            else
+                raise SystemCallError,"failed to serve as a seed: gko3 serve -p #{unzip_dir(app)} -r #{torrent_file} -S -1 --besthash" 
+            end
+        rescue => e
+            logger.warn("Error: #{e}")
+        end
+      end
+
       def store_buildpack_cache(app, path)
         store_package(app, path, :buildpack_cache)
       end

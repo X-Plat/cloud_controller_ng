@@ -19,7 +19,7 @@ module VCAP::CloudController
       @config_file = File.expand_path("../../../config/cloud_controller.yml", __FILE__)
       parse_options!
       parse_config
-
+      clear_gko3_seeds
       @log_counter = Steno::Sink::Counter.new
     end
 
@@ -27,6 +27,16 @@ module VCAP::CloudController
       @logger ||= Steno.logger("cc.runner")
     end
 
+    def clear_gko3_seeds
+        begin
+            system("gko3 cancel --all")
+            unless $?.success?
+                raise SystemCallError, "Failed to clear gko3 seeds when cc starts}"
+            end
+        rescue => e
+            logger.warn("Error: #{e}")
+        end
+    end
     def options_parser
       @parser ||= OptionParser.new do |opts|
         opts.on("-c", "--config [ARG]", "Configuration File") do |opt|

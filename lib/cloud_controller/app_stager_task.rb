@@ -167,11 +167,18 @@ module VCAP::CloudController
       false
     end
 
+    def use_p2p?
+        config[:droplets][:use_p2p] || false
+    end
     def staging_completion(stager_response)
       @app.droplet_hash = stager_response.droplet_hash
       @app.detected_buildpack = stager_response.detected_buildpack
 
       Staging.store_droplet(@app, @upload_handle.upload_path)
+      if use_p2p?
+        Staging.store_unzip_droplet(@app)
+        Staging.start_to_serve(@app)
+      end
 
       if (buildpack_cache = @upload_handle.buildpack_cache_upload_path)
         Staging.store_buildpack_cache(@app, buildpack_cache)

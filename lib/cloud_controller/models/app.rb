@@ -71,6 +71,9 @@ module VCAP::CloudController
       # Last staging response which will contain streaming log url
       attr_accessor :last_stager_response
 
+      #record infohash for serving seed by gko3
+      attr_accessor :infohash
+
       alias :kill_after_multiple_restarts? :kill_after_multiple_restarts
 
       def validate
