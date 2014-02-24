@@ -1,0 +1,283 @@
+#!/bin/env bash
+#############################################################################################
+# version:      0.0.1
+# brief:        a control script providing common interfaces for the module's cyclelife
+#        	please pay attention to the common lib : opbin/bin/lib.sh
+# usage:        sh control [start|stop|restart|monitor|status]
+# author:       yinpenghui(cliffyin)
+# email:        yinpenghui@baidu.com
+# history:      2013/12/17 create version 0.0.1
+#               2013/12/17 run succeed for initial version
+#############################################################################################
+
+#############################################################################################
+# Step 0. Setting script running mode
+#############################################################################################
+set -eu
+set -o pipefail
+
+: ${DEBUG:="off"}
+[[ $DEBUG == "on" ]] && set -x
+
+export PATH=/home/work/opbin/ruby-1.9.3-p448/bin:$PATH
+
+#############################################################################################
+# Step 1. Setting global variables: with default values, re-assign if needed
+#############################################################################################
+
+# module name
+PRO_NAME="cloud_controller_ng"
+
+# module path
+PRO_HOME="/home/work/${PRO_NAME}"
+
+# source lib
+source ${PRO_HOME}/opbin/bin/lib.sh
+
+# script name
+SCIRPT=$0
+
+# start waiting time : seconds
+START_WAIT_TIME=20
+
+# stop waiting time : seconds
+STOP_WAIT_TIME=20
+
+# module config file
+CONFIG_FILE="${PRO_HOME}/config/${PRO_NAME}.yml"
+
+# supervise
+SUPERVISE="${PRO_HOME}/opbin/bin/supervise"
+
+# module bin path
+MODULE_BIN_PATH="${PRO_HOME}/bin"
+
+# supervise deamon
+SUPERVISE_DEAMON_NAME="daemon.${PRO_NAME}"
+
+# supervise module
+SUPERVISE_MODULE_NAME="supervise.${PRO_NAME}"
+
+#############################################################################################
+# Step 2. Define some utility functions
+#############################################################################################
+
+# environment setup
+function env_setup()
+{
+    export PATH=/home/work/opbin/ruby-1.9.3-p448/bin:$PATH
+
+    mkdir -p /home/work/cc_resource/
+
+    export  TMPDIR=/home/work/cc_resource/cc-tmp
+  
+    mkdir -p /home/work/cc_resource/cc-tmp
+}
+
+# make sure pidfile name
+function gen_pidfile()
+{
+    local config_file=${CONFIG_FILE}
+    [[ -f ${config_file} ]] && {
+        [[ `grep "pid" ${config_file}` ]] && {
+            pid_file=`grep "pid" ${config_file} | awk -F':' '{print $2}'`
+            notice "Getting pid_file : ${pid_file} succeed!"
+            return 0
+        } || {
+            pid_file="${PRO_HOME}/status/${PRO_NAME}.pid_new"
+        }
+    } || {
+        pid_file="${PRO_HOME}/status/${PRO_NAME}.pid_new"
+    }
+
+    warning "Getting pid_file unexpected, please do check ${CONFIG_FILE}!"
+    return 0
+}
+
+# change the local ip
+function change_ip()
+{
+    local config_file=${CONFIG_FILE}
+
+    [[ ! -f ${config_file} ]] && {
+        fatal "${config_file} not exist, please do check!"
+        exit 1
+    }
+
+    change_ip_list=(
+        "localhost"
+        "127.0.0.1"
+    )
+    feature_str="local_route"
+    real_ip=`hostname -i`
+
+    for ((i=0; i<${#change_ip_list[@]}; i++))
+    do
+        [[ `grep "${feature_str}" ${config_file} | grep -v "grep" | grep "${change_ip_list[$i]}"` ]] && {
+            sed -i -e "s/${change_ip_list[$i]}/${real_ip}/g" ${config_file}
+        }
+    done
+}
+
+# gem install
+function gem_init_local()
+{
+    [[ $DEBUG == "on" ]] && {
+        bundle install --local
+    } || {
+        bundle install --local > /dev/null
+    }
+}
+
+# db migrate
+function db_migrate()
+{
+    cp ${PRO_HOME}/config/cloud_controller_ng.yml ${PRO_HOME}/config/cloud_controller.yml
+    bundle exec rake db:migrate
+}
+
+# generate start script
+function gen_sup_script()
+{
+    SUPERVISE_DEAMON="${MODULE_BIN_PATH}/${SUPERVISE_DEAMON_NAME}"
+    
+    [[ ! -d ${MODULE_BIN_PATH} ]] && {
+        warning "${MODULE_BIN_PATH} not exist, need generate it!" && {
+            mkdir -p ${MODULE_BIN_PATH}
+        }
+    }
+
+    [[ -f ${SUPERVISE_DEAMON} ]] && {
+        warning "${SUPERVISE_DEAMON} exists, need delete and re-generate!"
+        rm -f ${SUPERVISE_DEAMON} && {
+            notice "${SUPERVISE_DEAMON} been deleted succeed!"
+        }
+    }
+
+    DAEMON="${PRO_HOME}/bin/cloud_controller"
+    DAEMON_ARGS=" -c ${CONFIG_FILE} -m"
+    STDOUT_LOG="${PRO_HOME}/log/${PRO_NAME}_stdout.log"
+    STDERR_LOG="${PRO_HOME}/log/${PRO_NAME}_stderr.log"
+
+    #echo "nohup ruby ${DAEMON} ${DAEMON_ARGS} >>${STDOUT_LOG} 2>>${STDERR_LOG} & " \
+    #     > ${SUPERVISE_DEAMON}
+    echo "nohup ruby ${DAEMON} ${DAEMON_ARGS} &" > ${SUPERVISE_DEAMON}
+    
+    [[ -f ${SUPERVISE_DEAMON} ]] && {
+        notice "${SUPERVISE_DEAMON} generates succeed and move on to supervise start"
+    } || {
+        fatal "${SUPERVISE_DEAMON} generates failed and exiting ..."
+        exit ${STATE_UNEXPECT}
+    }
+}
+
+# generate supervise
+function gen_sup_module()
+{
+    SUPERVISE_MODULE="${MODULE_BIN_PATH}/${SUPERVISE_MODULE_NAME}"
+
+    [[ ! -d ${MODULE_BIN_PATH} ]] && {
+        warning "${MODULE_BIN_PATH} not exist, need generate it!" && {
+            mkdir -p ${MODULE_BIN_PATH}
+        }
+    }
+
+    [[ -f ${SUPERVISE_MODULE} ]] && {
+        warning "${SUPERVISE_MODULE} exists, need delete and re-generate!"
+        rm -f ${SUPERVISE_MODULE} && {
+            notice "${SUPERVISE_MODULE} been deleted succeed!"
+        }
+    }
+
+    [[ -f "${SUPERVISE}" ]] && {
+        cp ${SUPERVISE} ${SUPERVISE_MODULE} && {
+            notice "generating ${SUPERVISE_MODULE} succeed!"
+        }
+    } || {
+        fatal "${SUPERVISE} is missing, please do check!"
+        exit ${STATE_UNEXPECT}
+    }
+}
+
+#############################################################################################
+# Step 3. Overwrite the interface in common lib : ../opbin/bin/lib.sh
+#############################################################################################
+
+function start()
+{
+    # change ip and gem install
+    change_ip && gem_init_local && {
+        notice "bundle local succeed!"
+    } || {
+        warning "bundle local failed!"
+    }
+
+    
+    db_migrate && {
+        notice "db migrate succeed!"
+    } || {
+        warning "db migrate failed!"
+    }
+
+    # generate script for supervise start
+    gen_sup_script && gen_sup_module
+
+    # supervised start
+    SUPERVISE_ARGS="${PRO_HOME}/status/${PRO_NAME}"
+    mkdir -p ${PRO_HOME}/status/${PRO_NAME}
+    SUPERVISE_CMD=`cat ${SUPERVISE_DEAMON}`
+    (${SUPERVISE_MODULE} -p ${SUPERVISE_ARGS} -f "${SUPERVISE_CMD}" 0</dev/null &>/dev/null &)
+
+    # check status
+    check_pidstatus ${pid_file}
+}
+
+function stop()
+{
+    local supervise_pid=$(pidof ${SUPERVISE_MODULE_NAME})
+
+    [[ -z "${supervise_pid}" ]] && {
+        warning "${SUPERVISE_MODULE_NAME} is not running!"
+    } || {
+        wait_pid ${supervise_pid} && {
+            notice "${SUPERVISE_MODULE_NAME} stop succeed!"
+        } || {
+            warning "${SUPERVISE_MODULE_NAME} stop failed!"
+        }
+    }
+
+    wait_pidfile ${pid_file} && {
+        notice "${PRO_NAME} stop succeed!"
+    } || {
+        fatal "${PRO_NAME} stop failed!"
+    }
+}
+
+function ck_health()
+{
+    curl localhost:8432/healthz -u thin:thin 2>/dev/null && {
+        echo ""
+        notice "curl 8432 info succeed!"
+        check_pidstatus ${pid_file}
+        return 0
+    } || {
+        fatal "curl 8432 info failed!"
+        return 1
+    }
+
+    return 0
+}
+
+function ck_start()
+{
+    ck_health || return 1
+}
+
+function cmd_monitor()
+{
+    fatal "empty, not implement yet!"
+}
+
+env_setup
+gen_pidfile
+action $@
