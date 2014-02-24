@@ -123,6 +123,7 @@ module VCAP::CloudController
             #start to serve 
             result=`gko3 serve -p #{unzip_dir(app)} -r #{torrent_file} -S -1 --besthash`
             if $?.success?
+                logger.info("Start to serve seed by gko3 for app:#{app.guid}")
                 infohash=result.split("\n")[3].split(":")[1]
                 app.infohash=infohash
             else

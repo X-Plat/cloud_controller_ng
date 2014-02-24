@@ -293,6 +293,7 @@ module VCAP::CloudController
             unzip_dir=File.join(@config[:droplets][:fog_connection][:local_root],@config[:droplets][:unzipdroplet_directory_key],key_from_app(app,:other),"#{app.space.organization.name}_#{app.space.name}_#{app.name.split('_')[0]}")
             result=`gko3 add -p #{unzip_dir} -r #{torrent_file} -S -1 --seed`
             if $?.success?
+                logger.info("Start to serve seed by gko3 for app:#{app.guid}")
                 taskid=result.split("\n")[1].split(":")[1]
                 infohash=`gko3 list|grep -P "^\s+#{taskid}\s+"|awk '{print $4}'`.to_s.chomp
                 app.infohash=infohash
