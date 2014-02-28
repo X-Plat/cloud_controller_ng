@@ -11,6 +11,7 @@
 # the storage layer than FileUtils.mv, this should get refactored.
 
 require "cloudfront-signer"
+require "cloud_controller/dea/dea_client"
 
 module VCAP::CloudController
   class Staging < RestController::Base
@@ -126,6 +127,7 @@ module VCAP::CloudController
                 logger.info("Start to serve seed by gko3 for app:#{app.guid}")
                 infohash=result.split("\n")[3].split(":")[1]
                 app.infohash=infohash
+                VCAP::CloudController::DeaClient.info_hash[app.guid]=infohash
             else
                 raise SystemCallError,"failed to serve as a seed: gko3 serve -p #{unzip_dir(app)} -r #{torrent_file} -S -1 --besthash" 
             end

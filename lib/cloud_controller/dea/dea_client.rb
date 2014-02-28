@@ -22,12 +22,13 @@ module VCAP::CloudController
     class << self
       include VCAP::Errors
 
-      attr_reader :config, :message_bus, :dea_pool
+      attr_reader :config, :message_bus, :dea_pool, :info_hash
 
       def configure(config, message_bus, dea_pool)
         @config = config
         @message_bus = message_bus
         @dea_pool = dea_pool
+        @info_hash={}
       end
 
       def run
@@ -291,12 +292,12 @@ module VCAP::CloudController
                 return nil
             end
             unzip_dir=File.join(@config[:droplets][:fog_connection][:local_root],@config[:droplets][:unzipdroplet_directory_key],key_from_app(app,:other),"#{app.space.organization.name}_#{app.space.name}_#{app.name.split('_')[0]}")
-            result=`gko3 add -p #{unzip_dir} -r #{torrent_file} -S -1 --seed`
+            result=`gko3 add -n #{unzip_dir} -r #{torrent_file} -S -1 --seed`
             if $?.success?
                 logger.info("Start to serve seed by gko3 for app:#{app.guid}")
                 taskid=result.split("\n")[1].split(":")[1]
                 infohash=`gko3 list|grep -P "^\s+#{taskid}\s+"|awk '{print $4}'`.to_s.chomp
-                app.infohash=infohash
+                info_hash[app.guid]=infohash
                 return infohash
             else
                 raise SystemCallError,"ERROR: failed to serve as a seed: gko3 serve -p #{unzip_dir(app)} -r #{torrent_file} -S -1 --besthash"
@@ -308,7 +309,7 @@ module VCAP::CloudController
       end
       def app_infohash(app)
         if config[:droplets][:use_p2p]
-            if app.infohash.nil?     
+            if info_hash[app.guid].nil?
                 return seed_start_to_serve(app)
             else
                 return app.infohash    
