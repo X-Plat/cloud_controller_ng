@@ -42,6 +42,11 @@ module VCAP::CloudController::Models
       organization && organization.users.include?(user)
     end
 
+    def memory_remaining
+      memory_used = apps_dataset.sum(Sequel.*(:memory, :instances)) || 0
+      organization.quota_definition.memory_limit - memory_used
+    end
+
     def before_create
       add_inheritable_domains
       super
