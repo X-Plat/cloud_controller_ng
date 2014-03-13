@@ -289,7 +289,6 @@ module VCAP::CloudController
             torrent_file=File.join(torrent_dir,"#{app.guid}.torrent")
             unless File.exists?(torrent_file)
                 raise Errno::ENOENT, "WARNING: seed start to serve failed: #{torrent_file} doesn't exist" 
-                return nil
             end
             unzip_dir=File.join(@config[:droplets][:fog_connection][:local_root],@config[:droplets][:unzipdroplet_directory_key],key_from_app(app,:other),"#{app.space.organization.name}_#{app.space.name}_#{app.name.split('_')[0]}")
             result=`gko3 add -n #{unzip_dir} -r #{torrent_file} -S -1 --seed`
@@ -301,10 +300,10 @@ module VCAP::CloudController
                 return infohash
             else
                 raise SystemCallError,"ERROR: failed to serve as a seed: gko3 serve -p #{unzip_dir(app)} -r #{torrent_file} -S -1 --besthash"
-                return nil
             end
         rescue => e
             logger.warn("#{e}")
+            return nil
         end
       end
       def app_infohash(app)
