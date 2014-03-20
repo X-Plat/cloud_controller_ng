@@ -1,0 +1,5 @@
+- CLOUD_CONTROLLER_NG:
+  - 2.0.0.6:
+    release: 2014-03-20
+    description: separate resource quota by space
+
