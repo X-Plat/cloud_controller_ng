@@ -257,9 +257,8 @@ module VCAP::CloudController
 
       def check_memory_quota
         errors.add(:memory, :zero_or_less ) unless requested_memory > 0
-
-        if space && (space.organization.memory_remaining < additional_memory_requested)
-          errors.add(:memory, :quota_exceeded)
+        if space && (space.memory_remaining < additional_memory_requested)
+           errors.add(:memory, :quota_exceeded)
         end
       end
 
