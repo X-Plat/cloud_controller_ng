@@ -6,26 +6,44 @@ module VCAP::CloudController
   class DeaPool
     ADVERTISEMENT_EXPIRATION = 10
 
-    def initialize(message_bus, exclusive = nil)
+    def initialize(message_bus, exclusive=nil, matrix_based=false)
       @message_bus = message_bus
       @dea_advertisements = []
+      @dea_ips = {}
       @exclusive = exclusive ||=  false
+      @matrix_based = matrix_based
     end
 
     def register_subscriptions
-      message_bus.subscribe("dea.advertise") do |msg|
-        process_advertise_message(msg)
+      p @matrix_based
+      if @matrix_based
+        message_bus.subscribe("matrix.resource.status") do |msg|
+          process_advertise_message(msg)
+        end
+        message_bus.subscribe("dea.advertise") do |msg|
+          process_advertise_message_v3(msg)
+        end
+      else      
+        message_bus.subscribe("dea.advertise") do |msg|
+          process_advertise_message(msg)
+        end
       end
-
       message_bus.subscribe("dea.shutdown") do |msg|
         process_shutdown_message(msg)
       end
     end
 
+    def process_advertise_message_v3(msg)
+       advertisement = DeaAdvertisement.new(msg)
+       @dea_ips[advertisement.dea_ip] = advertisement.dea_id if advertisement.dea_ip
+    end
+
     def process_advertise_message(message)
       mutex.synchronize do
         advertisement = DeaAdvertisement.new(message)
-        remove_advertisement_for_id(advertisement.dea_id)
+        advertisement.dea_id= @dea_ips[advertisement.dea_ip]
+        #remove_advertisement_for_id(advertisement.dea_id)
+        remove_advertisement_for_ip(advertisement.dea_ip)
         @dea_advertisements << advertisement
         if @exclusive && advertisement.is_hybrid? 
            logger.warn "Hybrid dea node #{advertisement.dea_id} found. You could \
@@ -50,8 +68,8 @@ module VCAP::CloudController
 
         best_dea_ad = EligibleDeaAdvertisementFilter.new(@dea_advertisements).
                        only_meets_needs(mem, stack).
-                       hybrid_deploy_candidates(dea_requirements).
-                       upper_half_by_memory.
+                       #hybrid_deploy_candidates(dea_requirements).
+                       #upper_half_by_memory.
                        sample
 
         best_dea_ad && best_dea_ad.dea_id
@@ -63,7 +81,7 @@ module VCAP::CloudController
       app_id = opts[:app_id]
       space_id = opts[:space_id]
 
-      @dea_advertisements.find { |ad| ad.dea_id == dea_id }.increment_instance_count(app_id, space_id) unless opts[:no_staging]
+      #@dea_advertisements.find { |ad| ad.dea_id == dea_id }.increment_instance_count(app_id, space_id) unless opts[:no_staging]
     end
 
     def logger
@@ -82,6 +100,11 @@ module VCAP::CloudController
       @dea_advertisements.delete_if { |ad| ad.dea_id == id }
     end
 
+    def remove_advertisement_for_ip(ip)
+      @dea_advertisements.delete_if { |ad| ad.dea_ip == ip }
+    end
+
+
     def mutex
       @mutex ||= Mutex.new
     end
@@ -96,7 +119,7 @@ module VCAP::CloudController
 
       def increment_instance_count(app_id, space_id = nil)
         stats[:app_id_to_count][app_id.to_sym] = num_instances_of(app_id.to_sym) + 1
-        stats[:space_id_to_count][space_id.to_sym] = num_instances_of_space(space_id.to_sym) + 1 if space_id
+        #stats[:space_id_to_count][space_id.to_sym] = num_instances_of_space(space_id.to_sym) + 1 if space_id
       end
 
       def num_instances_of(app_id)
@@ -146,6 +169,14 @@ module VCAP::CloudController
 
       def dea_id
         stats[:id]
+      end
+
+      def dea_id=(id)
+        stats[:id] = id
+      end
+
+      def dea_ip  
+        stats[:ip]
       end
 
       def expired?

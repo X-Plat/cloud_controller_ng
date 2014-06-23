@@ -220,6 +220,7 @@ module VCAP::CloudController
 
       # @param [Enumerable, #each] indices an Enumerable of indices / indexes
       def start_instances_with_message(app, indices, message_override = {})
+        p '=============comhere in start with instance======================'
         msg = start_app_message(app)
         indices.each do |idx|
           msg[:index] = idx
@@ -228,9 +229,11 @@ module VCAP::CloudController
             :stack => app.stack.name,
             :app_guid => app.guid
           }
+          dea_requirements[:stack] = 'matrix' if config[:matrix_based]
           dea_requirements.merge!(:space_guid => app.space_guid) if config[:exclusive_deploy]
+          p dea_requirements
           dea_id = dea_pool.find_dea(dea_requirements)
-
+          p "=======================#{dea_id}========================="
           if dea_id
             dea_publish_start(dea_id, msg.merge(message_override))
             dea_pool.mark_app_started(dea_id: dea_id, app_id: app.guid, space_id: app.space_guid)
@@ -409,6 +412,12 @@ module VCAP::CloudController
       def dea_publish_update(args)
         logger.debug "sending 'dea.update' with '#{args}'"
         message_bus.publish("dea.update", args)
+      end
+
+      def create_matrix_container(msg, timeout, &blk)
+        sid = message_bus.request("matrix.container.create", msg) do |resp, error|
+          blk.call(resp) unless error != nil
+        end
       end
 
       def dea_publish_start(dea_id, args)
