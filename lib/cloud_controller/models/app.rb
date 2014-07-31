@@ -396,6 +396,11 @@ module VCAP::CloudController
         save
       end
 
+      def mark_as_staged
+        self.package_state = "STAGED"
+        save
+      end
+
       def mark_for_restaging(opts={})
         self.package_state = "PENDING"
         save if opts[:save]

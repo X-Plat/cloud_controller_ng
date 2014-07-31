@@ -25,10 +25,11 @@ module VCAP::CloudController
     BUILDPACK_CACHE_PATH = "/staging/buildpack_cache"
 
     class DropletUploadHandle
-      attr_accessor :guid, :upload_path, :buildpack_cache_upload_path
+      attr_accessor :guid, :task_id, :upload_path, :buildpack_cache_upload_path
 
-      def initialize(guid)
+      def initialize(guid, task_id)
         @guid = guid
+        @task_id = task_id
         @upload_path = nil
       end
     end
@@ -66,20 +67,21 @@ module VCAP::CloudController
         end
       end
 
-      def create_handle(guid)
-        handle = DropletUploadHandle.new(guid)
+      def create_handle(guid, task_id)
+        handle = DropletUploadHandle.new(guid, task_id)
         mutex.synchronize { upload_handles[handle.guid] = handle }
+        p "upload_handles #{upload_handles}"
         handle
       end
 
-      def destroy_handle(handle)
+      def destroy_handle(handle, task_id)
         return unless handle
         mutex.synchronize do
           files_to_delete = [handle.upload_path, handle.buildpack_cache_upload_path]
           files_to_delete.each do |file|
             File.delete(file) if file && File.exists?(file)
           end
-          upload_handles.delete(handle.guid)
+          upload_handles.delete(handle.guid) if upload_handles[handle.guid] && handle.task_id == upload_handles[handle.guid].task_id
         end
       end
 
@@ -340,13 +342,6 @@ module VCAP::CloudController
       upload(app, :droplet)
     end
 
-
-    def upload_increment_droplet
-      app = Models::App.find(:guid => guid)
-      raise AppNotFound.new(guid) if (app.nil? || app.package_state != "STAGED")
-      upload_increment(app, "staged_droplet")
-    end
-
     def upload_buildpack_cache(guid)
       app = Models::App.find(:guid => guid)
       raise AppNotFound.new(guid) if app.nil?
@@ -404,6 +399,7 @@ module VCAP::CloudController
       logger.debug "renaming #{tag} from '#{upload_path}' to '#{final_path}'"
 
       begin
+        p upload_path,final_path
         File.rename(upload_path, final_path)
       rescue => e
         raise StagingError.new("failed renaming #{tag} droplet from #{upload_path} to #{final_path}: #{e.inspect}\n#{e.backtrace.join("\n")}")
@@ -416,23 +412,6 @@ module VCAP::CloudController
       end
 
       logger.debug "uploaded #{tag} for #{app.guid} to #{final_path}"
-
-      HTTP::OK
-    end
-
-
-    def upload_increment(app,tag)
-      final_path = save_path(app.guid, tag)
-      logger.debug "renaming #{tag} from '#{upload_path}' to '#{final_path}'"
-      begin
-        File.rename(upload_path, final_path)
-      rescue => e
-        raise StagingError.new("failed renaming #{tag} droplet from #{upload_path} to #{final_path}: #{e.inspect}\n#{e.backtrace.join("\n")}")
-      end
-      logger.debug "uploaded increment #{tag} for #{app.guid} to #{final_path}"
-      app.droplet_hash = Digest::SHA1.file(final_path).hexdigest
-      Staging.store_droplet(app, final_path)
-      app.save
 
       HTTP::OK
     end
@@ -477,8 +456,6 @@ module VCAP::CloudController
     # Make sure that nginx upload path rules do not apply to download paths!
     post "#{DROPLET_PATH}/:guid/upload", :upload_droplet
     get  "#{DROPLET_PATH}/:guid/download", :download_droplet
-
-    post "#{DROPLET_PATH}/:guid/increment_upload", :upload_increment_droplet
 
     post "#{BUILDPACK_CACHE_PATH}/:guid/upload", :upload_buildpack_cache
     get "#{BUILDPACK_CACHE_PATH}/:guid/download", :download_buildpack_cache

@@ -41,7 +41,7 @@ module VCAP::CloudController
         if app.package_hash.nil? || app.package_hash.empty?
           raise Errors::AppPackageInvalid, "The app package hash is empty"
         end
-
+        puts "create new stager task"
         task = AppStagerTask.new(config, message_bus, app, stager_pool)
         task.stage(&completion_callback)
       end
@@ -50,6 +50,7 @@ module VCAP::CloudController
         if app.needs_staging?
           app.last_stager_response = stage_app(app, &success_callback)
         else
+          puts "no need staging"
           success_callback.call(:started_instances => 0)
         end
       end
