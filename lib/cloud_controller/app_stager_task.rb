@@ -51,13 +51,11 @@ module VCAP::CloudController
       # different cloud controller completing staging request for the same app before
       # this cloud controller completes the staging.
       @current_droplet_hash = @app.droplet_hash
-
       @app.staging_task_id = task_id
       @app.save
-
       @message_bus.publish("staging.stop", :app_id => @app.guid)
 
-      @upload_handle = Staging.create_handle(@app.guid)
+      @upload_handle = Staging.create_handle(@app.guid, task_id)
       @completion_callback = completion_callback
 
       staging_result = EM.schedule_sync do |promise|
@@ -117,6 +115,8 @@ module VCAP::CloudController
       check_staging_error!(response, error)
       ensure_staging_is_current!
       process_response(response)
+      @app.mark_as_staged
+      @app.save
     rescue => e
       destroy_upload_handle if staging_is_current?
       logger.error "Encountered error: #{e}\n#{e.backtrace.join("\n")}"
@@ -159,7 +159,7 @@ module VCAP::CloudController
     def staging_is_current?
       # Reload to find other updates of staging task id
       # which means that there was a new staging process initiated
-      @app.refresh
+      #@app.refresh
 
       @app.staging_task_id == task_id
     rescue Exception => e
@@ -173,7 +173,7 @@ module VCAP::CloudController
     def staging_completion(stager_response)
       @app.droplet_hash = stager_response.droplet_hash
       @app.detected_buildpack = stager_response.detected_buildpack
-
+      return unless @upload_handle.upload_path
       Staging.store_droplet(@app, @upload_handle.upload_path)
       if use_p2p?
         Staging.store_unzip_droplet(@app)
@@ -184,6 +184,7 @@ module VCAP::CloudController
         Staging.store_buildpack_cache(@app, buildpack_cache)
       end
 
+      @app.mark_as_staged
       @app.save
 
       DeaClient.dea_pool.mark_app_started(:dea_id => @stager_id, :app_id => @app.guid, :space_id => @app.space_guid, :no_staging => true)
@@ -196,7 +197,7 @@ module VCAP::CloudController
     end
 
     def destroy_upload_handle
-      Staging.destroy_handle(@upload_handle)
+      Staging.destroy_handle(@upload_handle, task_id)
     end
 
     def staging_task_properties(app)

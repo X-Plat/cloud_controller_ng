@@ -25,10 +25,11 @@ module VCAP::CloudController
     BUILDPACK_CACHE_PATH = "/staging/buildpack_cache"
 
     class DropletUploadHandle
-      attr_accessor :guid, :upload_path, :buildpack_cache_upload_path
+      attr_accessor :guid, :task_id, :upload_path, :buildpack_cache_upload_path
 
-      def initialize(guid)
+      def initialize(guid, task_id)
         @guid = guid
+        @task_id = task_id
         @upload_path = nil
       end
     end
@@ -66,20 +67,20 @@ module VCAP::CloudController
         end
       end
 
-      def create_handle(guid)
+      def create_handle(guid, task_id)
         handle = DropletUploadHandle.new(guid)
         mutex.synchronize { upload_handles[handle.guid] = handle }
         handle
       end
 
-      def destroy_handle(handle)
+      def destroy_handle(handle, task_id)
         return unless handle
         mutex.synchronize do
           files_to_delete = [handle.upload_path, handle.buildpack_cache_upload_path]
           files_to_delete.each do |file|
             File.delete(file) if file && File.exists?(file)
           end
-          upload_handles.delete(handle.guid)
+          upload_handles.delete(handle.guid) if upload_handles[handle.guid] && handle.task_id == upload_handles[handle.guid].task_id
         end
       end
 
