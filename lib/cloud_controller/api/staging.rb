@@ -68,7 +68,7 @@ module VCAP::CloudController
       end
 
       def create_handle(guid, task_id)
-        handle = DropletUploadHandle.new(guid)
+        handle = DropletUploadHandle.new(guid, task_id)
         mutex.synchronize { upload_handles[handle.guid] = handle }
         handle
       end
