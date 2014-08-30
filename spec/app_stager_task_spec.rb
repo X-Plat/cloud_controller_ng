@@ -157,7 +157,7 @@ module VCAP::CloudController
           end
 
           it "removes upload handle" do
-            Staging.should_receive(:destroy_handle).with(upload_handle)
+            Staging.should_receive(:destroy_handle).with(upload_handle, "some_task_id")
             ignore_error(Errors::StagingError) { stage }
           end
           it "keeps the app as not staged" do
@@ -200,7 +200,7 @@ module VCAP::CloudController
           end
 
           it "removes upload handle" do
-            Staging.should_receive(:destroy_handle).with(upload_handle)
+            Staging.should_receive(:destroy_handle).with(upload_handle, "some_task_id")
             ignore_error(Errors::StagingError) { stage }
           end
           it "keeps the app as not staged" do
@@ -301,7 +301,7 @@ module VCAP::CloudController
             end
 
             it "removes upload handle" do
-              Staging.should_receive(:destroy_handle).with(upload_handle)
+              Staging.should_receive(:destroy_handle).with(upload_handle, "some_task_id")
               stage
             end
 
@@ -373,7 +373,7 @@ module VCAP::CloudController
           end
 
           it "removes upload handle" do
-            Staging.should_receive(:destroy_handle).with(upload_handle)
+            Staging.should_receive(:destroy_handle).with(upload_handle, "some_task_id")
             stage
           end
           it "keeps the app as not staged" do
@@ -422,7 +422,7 @@ module VCAP::CloudController
           end
 
           it "removes upload handle" do
-            Staging.should_receive(:destroy_handle).with(upload_handle)
+            Staging.should_receive(:destroy_handle).with(upload_handle, "some_task_id")
             stage
           end
           it "keeps the app as not staged" do

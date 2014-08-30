@@ -168,7 +168,7 @@ module VCAP::CloudController
 
             expect {
               Models::Domain.make(:name => name_b)
-            }.to raise_error(Sequel::ValidationFailed, /overlapping_domain/)
+            }.not_to raise_error(Sequel::ValidationFailed, /overlapping_domain/)
           end
         end
       end
