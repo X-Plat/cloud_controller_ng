@@ -84,23 +84,7 @@ module VCAP::CloudController::Models
 
       overlapping_domains.count != 0
     end
-
-    def overlaps_domain_in_other_org?
-      domains_to_check = intermediate_domains
-      return unless domains_to_check
-      overlapping_domains = Domain.dataset.filter(
-        :name => domains_to_check
-      ).exclude(:id => id)
-
-      if owning_organization
-        overlapping_domains = overlapping_domains.exclude(
-          :owning_organization => owning_organization
-        )
-      end
-
-      overlapping_domains.count != 0
-    end
-
+    
     def as_summary_json
       {
         :guid => guid,
