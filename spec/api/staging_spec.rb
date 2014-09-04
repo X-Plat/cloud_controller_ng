@@ -58,11 +58,13 @@ module VCAP::CloudController
 
     describe "#create_handle" do
       let(:handle_id) { Sham.guid }
+      let(:task_id) { Sham.guid }
 
       context "when handle does not exist for given id" do
         it "creates handle with id and empty upload path" do
-          Staging.create_handle(handle_id).tap do |h|
+          Staging.create_handle(handle_id, task_id).tap do |h|
             h.guid.should == handle_id
+            h.task_id.should == task_id
             h.upload_path.should be_nil
             h.buildpack_cache_upload_path.should be_nil
           end
@@ -70,7 +72,7 @@ module VCAP::CloudController
 
         it "remembers handle" do
           expect {
-            Staging.create_handle(handle_id)
+            Staging.create_handle(handle_id, task_id)
           }.to change { Staging.lookup_handle(handle_id) }.from(nil)
         end
       end
@@ -78,13 +80,14 @@ module VCAP::CloudController
 
     describe "#destroy_handle" do
       let(:handle_id) { Sham.guid }
-      let!(:handle) { Staging.create_handle(handle_id) }
+      let(:task_id) { Sham.guid }
+      let!(:handle) { Staging.create_handle(handle_id, task_id) }
 
       context "when the handle exists" do
         def self.it_destroys_handle
           it "destroys the handle" do
             expect {
-              Staging.destroy_handle(handle)
+              Staging.destroy_handle(handle, task_id)
             }.to change { Staging.lookup_handle(handle_id) }.from(handle).to(nil)
           end
         end
@@ -98,7 +101,7 @@ module VCAP::CloudController
 
             it "destroys the uploaded file" do
               expect {
-                Staging.destroy_handle(handle)
+                Staging.destroy_handle(handle, task_id)
               }.to change { File.exists?(tmp_file.path) }.from(true).to(false)
             end
           end
@@ -121,7 +124,7 @@ module VCAP::CloudController
 
             it "destroys the buildpack cache uploaded file" do
               expect {
-                Staging.destroy_handle(handle)
+                Staging.destroy_handle(handle, task_id)
               }.to change { File.exists?(tmp_file.path) }.from(true).to(false)
             end
           end
@@ -134,7 +137,7 @@ module VCAP::CloudController
 
       context " when the handle does not exist" do
         it "does nothing" do
-          Staging.destroy_handle(handle)
+          Staging.destroy_handle(handle, task_id)
         end
       end
     end
@@ -309,9 +312,10 @@ module VCAP::CloudController
       end
 
       context "with a valid upload handle" do
-        let!(:handle) { Staging.create_handle(app_obj.guid) }
+        let(:task_id) { Sham.guid }
+        let!(:handle) { Staging.create_handle(app_obj.guid, task_id) }
 
-        after { Staging.destroy_handle(handle) }
+        after { Staging.destroy_handle(handle, task_id) }
 
         context "with valid app" do
           it "returns 200" do
@@ -404,8 +408,9 @@ module VCAP::CloudController
       end
 
       context "with a valid buildpack cache upload handle" do
-        let!(:handle) { Staging.create_handle(app_obj.guid) }
-        after { Staging.destroy_handle(handle) }
+        let(:task_id) { Sham.guid }
+        let!(:handle) { Staging.create_handle(app_obj.guid, task_id) }
+        after { Staging.destroy_handle(handle, task_id) }
 
         context "with a valid app" do
           it "returns 200" do

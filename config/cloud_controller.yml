@@ -1,24 +1,25 @@
 ---
-local_route: 10.36.166.28
+local_route: 127.0.0.1
 port: 8181
-pid_filename: /home/work/cloud_controller_ng/status/cloud_controller_ng.pid
-message_bus_uri: nats://n_user:n_passwd@10.36.166.28:8444/
+pid_filename: /tmp/cloud_controller.pid
+message_bus_uri: nats://127.0.0.1:4222
 
-external_domain: [api2.vcap.me]
+external_domain: api2.vcap.me
 
-bootstrap_admin_email: jpaas@baidu.com
+bootstrap_admin_email: sre@vmware.com
 
 system_domain_organization: the-system_domain-org-name
 system_domain: vcap.me
 app_domains:
-  - vcap.me
+  - customer-app-domain1.com
+  - customer-app-domain2.com
 
 info:
   name: "vcap"
   build: "2222"
   version: 2
-  support_address: "http://jpaas.baidu.com"
-  description: "JPaas"
+  support_address: "http://support.cloudfoundry.com"
+  description: "Cloud Foundry sponsored by Pivotal"
   api_version: "2.0.0"
 # TODO: put back once json schema is sorted out
 # allow_debug: false
@@ -28,20 +29,23 @@ nginx:
   instance_socket: "/var/vcap/sys/run/cloud_controller_ng/cloud_controller.sock"
 
 logging:
-  file: /home/work/cloud_controller_ng/log/cloud_controller.log
+  file: /tmp/cloud_controller.log
   level: debug2
 
+loggregator:
+  router: "127.0.0.1:3456"
+
 db:
-  database: mysql2://work_cc:work_cc@10.36.166.28:8584/cc_ng
+  database: "sqlite:///tmp/cloud_controller.db"
   max_connections: 32
   pool_timeout: 10
 
 uaa:
-  url: http://10.36.166.28:8080/uaa
+  url: "http://localhost:8080/uaa"
   resource_id: "cloud_controller"
-  symmetric_secret: tokensecret
+  symmetric_secret: "tokensecret"
 
-cc_partition: yeti
+cc_partition: test00
 
 bulk_api:
   auth_user: bulk_user
@@ -50,7 +54,7 @@ bulk_api:
 # App staging parameters
 staging:
   # Max duration for staging process
-  max_staging_runtime: 10000 # secs
+  max_staging_runtime: 120 # secs
   auth:
     user: zxsfhgjg
     password: ZNVfdase9
@@ -59,43 +63,52 @@ quota_definitions:
   free:
     non_basic_services_allowed: false
     total_services: 2
-    memory_limit: 204800000 # 200000 GB
+    memory_limit: 512 # 0.5 GB
   paid:
     non_basic_services_allowed: true
     total_services: 500
-    memory_limit: 204800000 # 200000 GB
+    memory_limit: 204800 # 200 GB
   trial:
     non_basic_services_allowed: false
     total_services: 2
-    memory_limit: 204800000 # 200000 GB
+    memory_limit: 512 # 0.5 GB
     trial_db_allowed: true
 
 default_quota_definition: free
 
 resource_pool:
-  resource_directory_key: cc-resources
+  resource_directory_key: "spec-cc-resources"
   fog_connection:
-    provider: Local
-    local_root: /home/work/cc_resource
+    provider: "AWS"
+    aws_access_key_id: "fake_aws_key_id"
+    aws_secret_access_key: "fake_secret_access_key"
 
 packages:
-  resource_directory_key: cc-packages
+  app_package_directory_key: "cc-packages"
   fog_connection:
-    provider: Local
-    local_root: /home/work/cc_resource
+    provider: "AWS"
+    aws_access_key_id: "fake_aws_key_id"
+    aws_secret_access_key: "fake_secret_access_key"
 
 droplets:
   droplet_directory_key: cc-droplets
-  unzipdroplet_directory_key: cc-unzipdroplets
-  seed_dir: ginko3_seed
-  use_p2p: true
   fog_connection:
-    provider: Local
-    local_root: /home/work/cc_resource
+    provider: "AWS"
+    aws_access_key_id: "fake_aws_key_id"
+    aws_secret_access_key: "fake_secret_access_key"
+
+buildpacks:
+  buildpack_directory_key: cc-buildpacks
+  fog_connection:
+    provider: "AWS"
+    aws_access_key_id: "fake_aws_key_id"
+    aws_secret_access_key: "fake_secret_access_key"
 
 db_encryption_key: "asdfasdfasdf"
 
 trial_db:
   guid: "78ad16cf-3c22-4427-a982-b9d35d746914"
 
-exclusive_deploy: false
+tasks_disabled: false
+
+hm9000_noop: true

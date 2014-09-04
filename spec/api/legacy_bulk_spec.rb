@@ -14,6 +14,7 @@ module VCAP::CloudController
       before do
         @bulk_user = "bulk_user"
         @bulk_password = "bulk_password"
+        @cc_partition = "test00"
       end
 
       describe ".register_subscription" do
@@ -21,7 +22,7 @@ module VCAP::CloudController
           LegacyBulk.configure(config, mbus)
 
           mbus.should_receive(:subscribe)
-            .with("cloudcontroller.bulk.credentials.ng")
+            .with("cloudcontroller.bulk.credentials.#{@cc_partition}")
             .and_yield("xxx", "inbox")
 
           mbus.should_receive(:publish).with("inbox", anything) do |_, msg|

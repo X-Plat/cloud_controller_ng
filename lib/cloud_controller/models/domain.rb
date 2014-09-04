@@ -45,7 +45,7 @@ module VCAP::CloudController::Models
       end
 
       validates_format DOMAIN_REGEX, :name
-      errors.add(:name, :overlapping_domain) if overlaps_domain_in_other_org?
+      errors.add(:name, :overlapping_domain) if overlaps_domain_in_other_reserved_org?
     end
 
     def validate_space(space)
@@ -66,7 +66,7 @@ module VCAP::CloudController::Models
       owning_organization
     end
 
-    def overlaps_domain_in_other_org?
+    def overlaps_domain_in_other_reserved_org?
       domains_to_check = intermediate_domains
       return unless domains_to_check
       overlapping_domains = Domain.dataset.filter(
@@ -77,11 +77,14 @@ module VCAP::CloudController::Models
         overlapping_domains = overlapping_domains.exclude(
           :owning_organization => owning_organization
         )
+        overlapping_domains = overlapping_domains.exclude(
+          :owning_organization_id => nil
+        )
       end
 
       overlapping_domains.count != 0
     end
-
+    
     def as_summary_json
       {
         :guid => guid,
