@@ -8,6 +8,8 @@ module VCAP::CloudController
 
     permissions_required do
       read Permissions::CFAdmin
+      update Permissions::CFAdmin 
+      update Permissions::SpaceDeveloper
       read Permissions::SpaceDeveloper
     end
 
@@ -25,5 +27,14 @@ module VCAP::CloudController
     end
 
     get  "#{path_id}/instances", :instances
+
+    def kill_instance(id, index)
+      app = find_id_and_validate_access(:update, id)
+
+      DeaClient.stop_indices(app, [index.to_i])
+      [HTTP::NO_CONTENT, nil]
+    end
+
+    delete "#{path_id}/instances/:index", :kill_instance
   end
 end
