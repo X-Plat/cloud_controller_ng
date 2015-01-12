@@ -53,7 +53,8 @@ module VCAP::CloudController
       @current_droplet_hash = @app.droplet_hash
       @app.staging_task_id = task_id
       @app.save
-      @message_bus.publish("staging.stop", :app_id => @app.guid)
+      @message_bus.publish("staging.stop", {:app_id => @app.guid, :task_id => task_id}) 
+      logger.warn("publish staging stop app_id #{@app.guid} task_id #{task_id}")
 
       @upload_handle = Staging.create_handle(@app.guid, task_id)
       @completion_callback = completion_callback
